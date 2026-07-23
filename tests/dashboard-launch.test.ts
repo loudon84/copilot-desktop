@@ -5,7 +5,6 @@ describe("local dashboard launch args", () => {
   it("matches the current upstream desktop dashboard command shape", () => {
     expect(buildLocalDashboardCliArgs(undefined, 9123)).toEqual([
       "dashboard",
-      "--isolated",
       "--no-open",
       "--host",
       "127.0.0.1",
@@ -21,7 +20,6 @@ describe("local dashboard launch args", () => {
       "--profile",
       "work",
       "dashboard",
-      "--isolated",
       "--no-open",
       "--host",
       "127.0.0.1",
@@ -30,5 +28,6 @@ describe("local dashboard launch args", () => {
       "--skip-build",
     ]);
     expect(args).not.toContain("--tui");
+    expect(args).not.toContain("--isolated");
   });
 });

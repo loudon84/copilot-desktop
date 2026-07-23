@@ -40,13 +40,23 @@ export interface SiblingHermesHome {
   hermesHome: string;
 }
 
-/** True iff this is a Windows host with WSL installed. The check is a
- *  pure existsSync — fast, side-effect-free, doesn't wake any
- *  distro. */
+/** True iff this is a Windows host where WSL is actually usable.
+ *  `wsl.exe` exists under System32 even when the Windows Subsystem for
+ *  Linux feature is not installed; probing `wsl -l -q` (stderr ignored)
+ *  distinguishes "binary present" from "WSL installed". */
 export function isWindowsHostWithWsl(): boolean {
   if (!IS_WINDOWS) return false;
   try {
-    return existsSync(WSL_EXE);
+    if (!existsSync(WSL_EXE)) return false;
+    execFileSync(WSL_EXE, ["-l", "-q"], {
+      encoding: "utf16le",
+      timeout: 5000,
+      windowsHide: true,
+      // Without stderr:ignore, an uninstalled WSL prints a localized
+      // "install via wsl --install" banner into the Electron console.
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return true;
   } catch {
     return false;
   }
@@ -75,6 +85,7 @@ export function listWslDistros(): string[] {
       encoding: "utf16le",
       timeout: 5000,
       windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
     });
     return String(raw)
       .split(/\r?\n/)

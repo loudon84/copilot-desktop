@@ -25,6 +25,11 @@ import {
   hermesCliArgs,
   getEnhancedPath,
 } from "./runtime/hermes-runtime-paths";
+import { buildLocalDashboardCliArgs } from "./dashboard-launch";
+import {
+  ensureLocalDashboardWebDist,
+  localDashboardWebDistDir,
+} from "./dashboard-web-dist";
 import {
   getApiServerKey,
   getConnectionConfig,
@@ -89,7 +94,7 @@ import {
  * Resolve which profile a gateway call targets. An explicit profile always
  * wins; otherwise we fall back to the file-backed active profile so that
  * callers without a profile argument (health polling, status, app-exit)
- * operate on whatever the desktop is currently showing �?not a hardcoded
+ * operate on whatever the desktop is currently showing �?not a hardcoded
  * "default". Returns `undefined` for the default profile (matching the
  * profileHome/readEnv/getProfilePort convention).
  */
@@ -105,9 +110,9 @@ function profileKey(profile?: string): string {
 /**
  * Normalise a remote-mode URL the user typed into the connection
  * settings.  Strips trailing slashes and, importantly, a trailing
- * `/v1` segment �?callers append `/v1/<path>` themselves, so leaving
+ * `/v1` segment �?callers append `/v1/<path>` themselves, so leaving
  * the user's `/v1` would produce `http://host/v1/v1/chat/completions`
- * �?404.  Reported as #266 (multiple users entered the URL "with
+ * �?404.  Reported as #266 (multiple users entered the URL "with
  * /v1" because the gateway's curl examples show that form).
  *
  * Also tolerates trailing whitespace and the rare `/v1/` (slash-suffixed)
@@ -134,7 +139,7 @@ export function getApiUrl(profile?: string): string {
   }
   // Local mode: each profile's gateway binds its own port so they can run
   // concurrently. Address the active (or explicitly requested) profile's
-  // gateway rather than a fixed 8642 �?that constant would always resolve to
+  // gateway rather than a fixed 8642 �?that constant would always resolve to
   // whichever gateway grabbed the port first, regardless of active profile.
   return `http://127.0.0.1:${getProfilePort(resolveProfile(profile))}`;
 }
@@ -144,7 +149,7 @@ export function isRemoteMode(): boolean {
   return mode === "remote" || mode === "ssh";
 }
 
-/** True only for pure remote HTTP �?SSH tunnel has full local access via SSH exec */
+/** True only for pure remote HTTP �?SSH tunnel has full local access via SSH exec */
 export function isRemoteOnlyMode(): boolean {
   return getConnectionConfig().mode === "remote";
 }
@@ -178,7 +183,7 @@ function getApiAuthHeaders(profile?: string): Record<string, string> {
     ...getRemoteAuthHeader(),
   };
   // Local API server key (API_SERVER_KEY in the profile's .env /
-  // config.yaml) only applies in local mode �?in remote/SSH mode the
+  // config.yaml) only applies in local mode �?in remote/SSH mode the
   // remote endpoint's own auth header is authoritative.
   if (!isRemoteMode()) {
     const apiServerKey = getApiServerKey(profile);
@@ -650,12 +655,29 @@ class TuiGatewayClient {
       throw new Error(`hermes-agent repo not found at ${HERMES_REPO}`);
     }
 
+    // Pre-build outside the 45s readiness window. An incomplete web
+    // workspace makes hermes's in-process "Building web UI" exceed
+    // waitForDashboardReady and force Chat onto the API-stream fallback.
+    const distReady = await ensureLocalDashboardWebDist();
+    if (!distReady) {
+      throw new Error(
+        `Hermes dashboard web UI is not built at ${localDashboardWebDistDir()}. ` +
+          "Install Node.js, then run: npm install --workspace web && npm run build -w web " +
+          `in ${HERMES_REPO}`,
+      );
+    }
+
     this.port = await pickDashboardPort();
     this.token = randomUUID();
+    const profile =
+      this.env.HERMES_PROFILE?.trim() ||
+      (this.key !== "default" ? this.key : undefined);
     const dashboardEnv = {
       ...this.env,
+      PATH: getEnhancedPath(),
       HERMES_DASHBOARD_SESSION_TOKEN: this.token,
       HERMES_DASHBOARD_TUI: "1",
+      HERMES_WEB_DIST: localDashboardWebDistDir(),
     };
     // NB: no `--tui` flag here. It's a *global* hermes option (valid only
     // before a subcommand), not a `dashboard` subcommand option, so passing
@@ -663,14 +685,10 @@ class TuiGatewayClient {
     // --tui") and the warmup fails. The JSON-RPC gateway this client talks to
     // (`/api/ws`) is always served by a plain `hermes dashboard` and is gated
     // only by HERMES_DASHBOARD_SESSION_TOKEN (set in `dashboardEnv`).
-    const args = hermesCliArgs([
-      "dashboard",
-      "--no-open",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(this.port),
-    ]);
+    // Upstream also dropped `--isolated`; buildLocalDashboardCliArgs omits it.
+    const args = hermesCliArgs(
+      buildLocalDashboardCliArgs(profile, this.port, { skipBuild: true }),
+    );
     const proc = spawn(HERMES_PYTHON, args, {
       cwd: HERMES_REPO,
       env: dashboardEnv,
@@ -981,7 +999,7 @@ function ensureApiServerConfig(profile?: string): void {
     const { configFile } = profilePaths(resolveProfile(profile));
     if (!existsSync(configFile)) return;
     const content = readFileSync(configFile, "utf-8");
-    // If api_server is already configured, skip �?the port is then governed
+    // If api_server is already configured, skip �?the port is then governed
     // by the existing block (reconciled for collisions by getProfilePort) and
     // by the API_SERVER_PORT env we pass at spawn.
     if (/api_server/i.test(content)) return;
@@ -1004,7 +1022,7 @@ platforms:
 }
 
 // ────────────────────────────────────────────────────
-//  HTTP API streaming (fast path �?no process spawn)
+//  HTTP API streaming (fast path �?no process spawn)
 // ────────────────────────────────────────────────────
 
 /**
@@ -1111,14 +1129,14 @@ type ChatContent =
 /**
  * Build the OpenAI-compatible `content` payload for a user turn.
  *
- * - No attachments �?plain string (preserves prompt-cache friendliness for
+ * - No attachments �?plain string (preserves prompt-cache friendliness for
  *   the all-text path).
- * - Text-file attachments �?inlined into the text part as `<file �?�?/file>`
+ * - Text-file attachments �?inlined into the text part as `<file �?�?/file>`
  *   wrappers (the gateway rejects `file`/`input_file` content parts, see
  *   gateway/platforms/api_server.py:263).
- * - Image attachments �?emitted as `image_url` parts in the OpenAI vision
+ * - Image attachments �?emitted as `image_url` parts in the OpenAI vision
  *   format, which the gateway accepts and converts for Anthropic providers.
- * - Path-ref attachments �?appended as `[Attached file: <abs-path>]` lines
+ * - Path-ref attachments �?appended as `[Attached file: <abs-path>]` lines
  *   so the agent's existing file-reading skills can pick them up.  Works
  *   for PDFs/docx/binaries the gateway won't pass through inline.
  */
@@ -1157,7 +1175,7 @@ export function buildUserContent(
     image_url: { url: img.dataUrl! },
   }));
 
-  // Omit the text part entirely when there's nothing to say �?some
+  // Omit the text part entirely when there's nothing to say �?some
   // providers (Anthropic via Bedrock, certain vision endpoints) reject an
   // empty-string text part as `invalid_content_part`.
   if (!composedText) return imageParts;
@@ -1215,7 +1233,7 @@ function sendMessageViaApi(
   const controller = new AbortController();
 
   // Build full conversation from history + current message (standard OpenAI format).
-  // History items are kept text-only �?attachments from prior turns live in
+  // History items are kept text-only �?attachments from prior turns live in
   // the gateway's session state when resuming via session_id.
   const messages: Array<{ role: string; content: ChatContent }> = [];
   if (history && history.length > 0) {
@@ -1231,7 +1249,7 @@ function sendMessageViaApi(
 
   // Context folder (issue #27): when the conversation is bound to a working
   // folder, prepend a system message so the agent scopes file/terminal work
-  // there. Injected only at the request-build step �?the renderer's visible
+  // there. Injected only at the request-build step �?the renderer's visible
   // transcript stays clean, and getSessionMessages filters non-user/assistant
   // roles, so reloaded sessions stay clean too.
   const ctxSystem = contextFolderSystemMessage(contextFolder);
@@ -1249,7 +1267,7 @@ function sendMessageViaApi(
 
   // Encode the body up-front into a Buffer so we can:
   //  1. Set `Content-Length` accurately based on byte length (NOT char
-  //     count �?JSON.stringify of an image data URL is ASCII so they
+  //     count �?JSON.stringify of an image data URL is ASCII so they
   //     match, but multi-byte chars in user text would diverge).
   //  2. Disable Node's default `Transfer-Encoding: chunked` framing for
   //     bodies written via `req.write(body); req.end();`. Chunked
@@ -1263,14 +1281,14 @@ function sendMessageViaApi(
   const headers = getJsonApiHeaders(profile, bodyBuf);
 
   // Session id: always send via `X-Hermes-Session-Id` so the gateway
-  // doesn't fall back to its `_derive_chat_session_id` fingerprint �?
-  // sha256(system_prompt + first_user_message)[:16] �?which collides
+  // doesn't fall back to its `_derive_chat_session_id` fingerprint �?
+  // sha256(system_prompt + first_user_message)[:16] �?which collides
   // across every chat whose first user message is the same (e.g. "Hi").
   // The collision silently fragments state.db rows across unrelated
   // conversations and, post-#352, surfaces as old-session content
   // bleeding into new chats when our end-of-stream merge reads
   // getSessionMessages(). Filed upstream as
-  // NousResearch/hermes-agent#7484 (security framing �?same root cause).
+  // NousResearch/hermes-agent#7484 (security framing �?same root cause).
   //
   // Format: `desk-<ms>-<uuidv4>`. UUIDv4 alone is collision-safe
   // probabilistically (~10⁻³⁶ for any pair); the timestamp prefix makes
@@ -1336,7 +1354,7 @@ function sendMessageViaApi(
     const probeBody = JSON.stringify(probeBodyObj);
     const probeBodyBuf = Buffer.from(probeBody, "utf-8");
     // Per-request Content-Length (the outer `headers` object's value
-    // belongs to the streaming request �?reusing it here would lie about
+    // belongs to the streaming request �?reusing it here would lie about
     // this body's size and break the framing the same way the missing
     // Content-Length did before #405). Spread + override.
     const probeHeaders = {
@@ -1394,7 +1412,7 @@ function sendMessageViaApi(
           cb.onToolProgress(chatToolProgressLabel(toolEvent));
         }
       } catch {
-        /* malformed �?skip */
+        /* malformed �?skip */
       }
     }
   }
@@ -1406,7 +1424,7 @@ function sendMessageViaApi(
       } else if (lastError) {
         finish(lastError);
       } else {
-        // Streaming returned empty �?probe non-streaming to get the real error
+        // Streaming returned empty �?probe non-streaming to get the real error
         probeRealError();
       }
       return true; // signals done
@@ -1445,7 +1463,7 @@ function sendMessageViaApi(
       // Reasoning / thinking tokens, when the provider emits them.
       // Forwarded on a dedicated callback so the renderer can render the
       // thinking bubble live (#352). We do NOT set `hasContent = true`
-      // here �?reasoning alone shouldn't suppress the "empty stream"
+      // here �?reasoning alone shouldn't suppress the "empty stream"
       // diagnostic probe.
       const reasoningDelta = extractReasoningDelta(delta);
       if (reasoningDelta && cb.onReasoningChunk) {
@@ -1466,7 +1484,7 @@ function sendMessageViaApi(
         }
       }
     } catch {
-      /* malformed chunk �?skip */
+      /* malformed chunk �?skip */
     }
     return false;
   }
@@ -1521,7 +1539,7 @@ function sendMessageViaApi(
         }
         if (!dataLine) return false;
         if (eventType) {
-          // Custom event (e.g. hermes.tool.progress) �?never signals [DONE]
+          // Custom event (e.g. hermes.tool.progress) �?never signals [DONE]
           processCustomEvent(eventType, dataLine);
           return false;
         }
@@ -1544,7 +1562,7 @@ function sendMessageViaApi(
             if (processSseBlock(part)) return;
           }
         }
-        // Signal completion �?even when no content was received
+        // Signal completion �?even when no content was received
         if (!hasContent && !lastError) {
           probeRealError();
           return;
@@ -1796,7 +1814,7 @@ function sendMessageViaRuns(
                 JSON.parse(parsed.data) as Record<string, unknown>,
               );
             } catch {
-              /* malformed run event �?skip */
+              /* malformed run event �?skip */
             }
           }
         });
@@ -1809,7 +1827,7 @@ function sendMessageViaRuns(
                   JSON.parse(parsed.data) as Record<string, unknown>,
                 );
               } catch {
-                /* malformed run event �?skip */
+                /* malformed run event �?skip */
               }
             }
           }
@@ -2057,7 +2075,7 @@ async function sendMessageViaTuiGateway(
           ? event.payload.request_id
           : "";
       if (!requestId) {
-        // No id to answer �?fall back to the legacy interrupt so the turn ends
+        // No id to answer �?fall back to the legacy interrupt so the turn ends
         // cleanly rather than hanging on a question we can never resolve.
         void client
           .request("session.interrupt", { session_id: activeSessionId }, 5_000)
@@ -2116,7 +2134,7 @@ async function sendMessageViaTuiGateway(
         );
         return;
       }
-      // A sudo password / secret value is sensitive �?collect it in the
+      // A sudo password / secret value is sensitive �?collect it in the
       // hardened askpass modal (never the chat transcript) and forward it to
       // the gateway. Cancel maps to "" (a safe skip the gateway handles).
       //
@@ -2129,7 +2147,7 @@ async function sendMessageViaTuiGateway(
 
       // Vault-first resolution for secret.request: attempt a provider lookup
       // before falling back to the interactive modal. sudo.request always needs
-      // an interactive password �?no vault lookup applies.
+      // an interactive password �?no vault lookup applies.
       const vaultValue = !isSudo && envVar ? getSecret(envVar, profile) : null;
 
       const collect: Promise<string> =
@@ -2233,7 +2251,7 @@ async function sendMessageViaTuiGateway(
 }
 
 // ────────────────────────────────────────────────────
-//  CLI fallback (slow path �?spawns process)
+//  CLI fallback (slow path �?spawns process)
 // ────────────────────────────────────────────────────
 
 const NOISE_PATTERNS = [/^[╭╰│╮╯─┌┐└┘┤├┬┴┼]/, /⚕\s*Hermes/];
@@ -2247,7 +2265,7 @@ type ModelConfig = ReturnType<typeof getModelConfig>;
  * Overlay a session-scoped model override on top of the persisted config.yaml
  * model config. Non-empty override fields win; empty/absent fields fall back to
  * the persisted value. The result drives request routing for a single turn
- * without ever touching config.yaml (the global default is preserved �?#688).
+ * without ever touching config.yaml (the global default is preserved �?#688).
  */
 function effectiveModelConfig(
   profile: string | undefined,
@@ -2348,7 +2366,7 @@ function sendMessageViaCli(
     args.push("--provider", cliProvider);
   } else if (overrideChangesRouting && mc.provider && mc.provider !== "auto") {
     // A session override that switches to a named provider (e.g. gemini) must
-    // select it explicitly �?otherwise the CLI would infer the provider from
+    // select it explicitly �?otherwise the CLI would infer the provider from
     // the now-stale config/env and route to the wrong host.
     args.push("--provider", mc.provider);
   }
@@ -2363,7 +2381,7 @@ function sendMessageViaCli(
 
   // Inject all API keys from the profile .env so the CLI can access them.
   // The built-in remote OpenAI-compatible providers (DeepSeek, Together,
-  // Fireworks, Cerebras, Mistral) are listed here too �?without them the
+  // Fireworks, Cerebras, Mistral) are listed here too �?without them the
   // agent has no way to see the user-configured key when the user picked
   // the built-in provider entry rather than a `custom` entry, and the
   // upstream fallback chain then misroutes the request (see #260 / the
@@ -2403,7 +2421,7 @@ function sendMessageViaCli(
   // per-key): a `command` backend would otherwise spawn the helper ~30 times
   // synchronously here, freezing the main process if the helper blocks on an
   // unlock prompt. list() runs the helper at most once. A bare-value helper that
-  // can't enumerate returns {} �?those users resolve a key via the targeted
+  // can't enumerate returns {} �?those users resolve a key via the targeted
   // getSecret() path elsewhere, never this broadcast loop (which would otherwise
   // spray one secret across every vendor key name).
   const providerSecrets = providerListSafe(profile);
@@ -2443,7 +2461,7 @@ function sendMessageViaCli(
     // the key here, AND for writing it back into the child env below so
     // both old and new engines locate the same value:
     //
-    //  - Old engine (�?v0.14.0) routes via OPENAI_API_KEY + OPENAI_BASE_URL.
+    //  - Old engine (�?v0.14.0) routes via OPENAI_API_KEY + OPENAI_BASE_URL.
     //  - Current upstream main refuses to forward OPENAI_API_KEY to a
     //    non-openai host and instead derives <VENDOR>_API_KEY from the
     //    URL host (see hermes_cli/runtime_provider.py::_host_derived_api_key).
@@ -2451,7 +2469,7 @@ function sendMessageViaCli(
     //    custom provider on api.deepseek.com / api.groq.com / etc. falls
     //    through to "no-key-required" and 401s.
     //
-    // Writing both env-var forms is the additive compat strategy �?each
+    // Writing both env-var forms is the additive compat strategy �?each
     // engine reads the form it knows; the unused one is dead weight.
     const hostDerivedEnvKey = hostDerivedEnvKeyForUrl(mc.baseUrl);
 
@@ -2500,7 +2518,7 @@ function sendMessageViaCli(
     // Forward-compat with upstream main: also write the host-derived
     // env var so `_host_derived_api_key` finds it. Only when the URL
     // matches a known vendor (NOT for generic local LLMs), and only
-    // when we have a real key �?never propagate "no-key-required" to
+    // when we have a real key �?never propagate "no-key-required" to
     // a vendor-scoped slot, and never overwrite OPENAI_API_KEY /
     // ANTHROPIC_API_KEY through this path (they're handled above).
     if (
@@ -2683,7 +2701,7 @@ async function sendMessageViaBestApi(
   override?: SessionModelOverride,
 ): Promise<ChatHandle> {
   const approvalCommand = /^\/(?:approve|deny)\b/i.test(message.trim());
-  // Skip the TUI gateway when a session-scoped model override is active �?the
+  // Skip the TUI gateway when a session-scoped model override is active �?the
   // TUI gateway reads its model from config.yaml and has no per-request
   // override mechanism. The API path below already honours the override.
   if (
@@ -2949,7 +2967,7 @@ export async function sendMessage(
   );
 }
 
-// Lazy init �?called on first sendMessage or gateway start
+// Lazy init �?called on first sendMessage or gateway start
 let _initialized = false;
 let _healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -2967,7 +2985,7 @@ function startHealthPolling(): void {
   if (_healthCheckInterval) return;
   _healthCheckInterval = setInterval(async () => {
     apiServerAvailable = await isApiServerReady();
-    // Stop polling once API is confirmed available �?only re-check on demand
+    // Stop polling once API is confirmed available �?only re-check on demand
     if (apiServerAvailable && _healthCheckInterval) {
       clearInterval(_healthCheckInterval);
       _healthCheckInterval = null;
@@ -2987,8 +3005,8 @@ export function stopHealthPolling(): void {
 // ────────────────────────────────────────────────────
 
 // Profiles each own a gateway, keyed by profileKey() ("default" for the
-// default profile, the profile name otherwise). Tracking them in maps �?
-// rather than a single global �?lets several profiles' gateways run at once
+// default profile, the profile name otherwise). Tracking them in maps �?
+// rather than a single global �?lets several profiles' gateways run at once
 // (e.g. each keeping its own Telegram bot online), which is the documented
 // hermes model: one gateway per profile, bound to that profile's own port.
 const gatewayProcesses = new Map<string, ChildProcess>();
@@ -3095,7 +3113,7 @@ export function buildGatewayEnv(profile?: string): Record<string, string> {
   // `api_server.extra.key` from config.yaml, or `os.getenv("API_SERVER_KEY")`
   // at startup. Upstream `gateway/run.py:608-610` bridges *top-level*
   // config.yaml keys into env vars, so `API_SERVER_KEY:` at the top
-  // level works �?but the nested `api_server.token:` location does not
+  // level works �?but the nested `api_server.token:` location does not
   // become an env var, and the gateway never reads it directly.
   //
   // The result is a divergence: the desktop happily sends
@@ -3105,7 +3123,7 @@ export function buildGatewayEnv(profile?: string): Record<string, string> {
   //   "Session continuation requires API key authentication.
   //    Configure API_SERVER_KEY to enable this feature."
   // (api_server.py:1097-1109). This is what users on Telegram, Reddit,
-  // and several open issues have been hitting since v0.5.1 �?PR #357
+  // and several open issues have been hitting since v0.5.1 �?PR #357
   // started sending the session header on every fresh chat, which made
   // the latent divergence user-visible on every send.
   //
@@ -3131,16 +3149,16 @@ function gatewayCliCommandArgs(
 
 export function startGatewayDetailed(profile?: string): GatewayStartResult {
   // Defensive: the local gateway is never the right thing to spawn in
-  // remote/SSH mode �?the user is pointing at an off-machine server.
+  // remote/SSH mode �?the user is pointing at an off-machine server.
   // Callers should already gate, but several IPC handlers historically
-  // forgot to (issue #266), and reaching `spawn(HERMES_PYTHON, �?` when
+  // forgot to (issue #266), and reaching `spawn(HERMES_PYTHON, �?` when
   // there's no local hermes-agent install produces an uncaught ENOENT
   // that pops a generic error dialog.  Refuse cleanly here.
   if (isRemoteMode()) {
     const error =
       "The local gateway can only be started in local mode. Switch to local mode, or start the gateway on the remote Hermes host.";
     console.warn(
-      "[gateway] startGateway() called in remote/SSH mode �?refusing local spawn",
+      "[gateway] startGateway() called in remote/SSH mode �?refusing local spawn",
     );
     return { success: false, running: false, error };
   }
@@ -3280,7 +3298,7 @@ function parsePidFromFile(pidFile: string): number | null {
  * The gateway.pid path for a profile. The hermes CLI writes it into the
  * profile's home directory (~/.hermes/gateway.pid for default,
  * ~/.hermes/profiles/<name>/gateway.pid for a named profile), so each
- * profile's gateway has its own PID file �?that's what lets them coexist.
+ * profile's gateway has its own PID file �?that's what lets them coexist.
  */
 function gatewayPidPath(profile?: string): string {
   return join(profileHome(resolveProfile(profile)), "gateway.pid");
@@ -3300,7 +3318,7 @@ function readPidFileEntry(
 
 /**
  * Stop a single profile's gateway. Defaults to the active profile. By design
- * this only touches the named profile �?switching profiles, app exit, etc.
+ * this only touches the named profile �?switching profiles, app exit, etc.
  * must never take down a *different* profile's gateway (and its bots).
  */
 export function stopGateway(
@@ -3549,7 +3567,7 @@ export function restartGateway(
   healthPollMs = 250,
   stopTimeoutMs = 5000,
 ): Promise<boolean> {
-  // Same defensive gate as startGateway �?the local gateway has no role
+  // Same defensive gate as startGateway �?the local gateway has no role
   // in remote/SSH mode. Cheap to check; catches IPC paths that don't
   // wrap their restart calls in an isRemoteMode() check.
   if (isRemoteMode()) return Promise.resolve(false);

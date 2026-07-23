@@ -14,9 +14,10 @@ export function buildLocalDashboardCliArgs(
   port: number,
   options: LocalDashboardCliOptions = {},
 ): string[] {
+  // Upstream dropped `--isolated` from `hermes dashboard`; passing it exits 2
+  // ("unrecognized arguments") and the gateway never becomes ready.
   const args = dashboardCliArgs(profile, [
     "dashboard",
-    "--isolated",
     "--no-open",
     "--host",
     "127.0.0.1",

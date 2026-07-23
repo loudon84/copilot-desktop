@@ -191,6 +191,10 @@ export function getEnhancedPath(): string {
           // Common user/system installs used when Claw3D setup runs before or
           // outside the bundled installer.
           process.env.NVM_SYMLINK,
+          // nvm4w (Windows) keeps the active Node under NVM_HOME\nodejs.
+          process.env.NVM_HOME
+            ? join(process.env.NVM_HOME, "nodejs")
+            : undefined,
           process.env.APPDATA ? join(process.env.APPDATA, "npm") : undefined,
           process.env.ProgramFiles
             ? join(process.env.ProgramFiles, "nodejs")

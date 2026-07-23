@@ -15,6 +15,11 @@ import {
   HERMES_REPO,
 } from "./runtime/hermes-runtime-paths";
 import { buildLocalDashboardCliArgs } from "./dashboard-launch";
+import {
+  ensureLocalDashboardWebDist,
+  hasLocalDashboardWebDist,
+  localDashboardWebDistDir,
+} from "./dashboard-web-dist";
 import { dashboardWebSocketUrlForRenderer } from "./dashboard-websocket-relay";
 import { ensureLocalDashboardCompatibility } from "./hermes-agent-compat";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -181,10 +186,6 @@ function dashboardLogPath(profile: string | undefined): string {
   const dir = profileHome(profile);
   mkdirSync(dir, { recursive: true });
   return join(dir, "dashboard-stderr.log");
-}
-
-function dashboardHasPrebuiltWebDist(): boolean {
-  return existsSync(join(HERMES_REPO, "hermes_cli", "web_dist", "index.html"));
 }
 
 async function getFreePort(): Promise<number> {
@@ -623,9 +624,24 @@ export async function startDashboard(
   const baseUrl = `http://127.0.0.1:${port}`;
   const logPath = dashboardLogPath(resolvedProfile);
   const stderrFd = openSync(logPath, "a");
-  const hasPrebuiltWebDist = dashboardHasPrebuiltWebDist();
+
+  // Build outside the readiness wait — see dashboard-web-dist.ts.
+  const distReady = await ensureLocalDashboardWebDist();
+  if (!distReady) {
+    closeSync(stderrFd);
+    return {
+      supported: true,
+      running: false,
+      logPath,
+      error:
+        `Hermes dashboard web UI is not built at ${localDashboardWebDistDir()}. ` +
+        "Install Node.js, then run: npm install --workspace web && npm run build -w web " +
+        `in ${HERMES_REPO}`,
+    };
+  }
+
   const cliArgs = buildLocalDashboardCliArgs(resolvedProfile, port, {
-    skipBuild: hasPrebuiltWebDist,
+    skipBuild: hasLocalDashboardWebDist(),
   });
 
   let proc: ChildProcess;
@@ -639,9 +655,7 @@ export async function startDashboard(
         HERMES_HOME,
         HERMES_DASHBOARD_SESSION_TOKEN: token,
         HERMES_DESKTOP: "1",
-        ...(hasPrebuiltWebDist
-          ? { HERMES_WEB_DIST: join(HERMES_REPO, "hermes_cli", "web_dist") }
-          : {}),
+        HERMES_WEB_DIST: localDashboardWebDistDir(),
       },
       stdio: ["ignore", "ignore", stderrFd],
       detached: false,
@@ -676,10 +690,7 @@ export async function startDashboard(
   });
 
   try {
-    await waitForDashboardReady(
-      connection,
-      hasPrebuiltWebDist ? 45_000 : 180_000,
-    );
+    await waitForDashboardReady(connection, 45_000);
     await probeDashboardWebSocket(connection, 5_000);
   } catch (err) {
     dashboards.delete(key);
