@@ -5,7 +5,7 @@ import { Copy, Check } from "lucide-react";
 import loadingGif from "../../assets/loadingo.gif";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
-import { AttachmentChip } from "../../components/AttachmentChip";
+import { MessageAttachmentGrid } from "../../components/files";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
@@ -201,6 +201,8 @@ interface MessageRowProps {
   showAvatar?: boolean;
   /** Appearance of the chatting agent, shown once the avatar goes idle. */
   agent?: AgentAvatarInfo;
+  /** Open File Preview for a managed attachment id. */
+  onPreviewFile?: (fileId: string) => void;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -211,6 +213,7 @@ export const MessageRow = memo(function MessageRow({
   onDeny,
   showAvatar = true,
   agent,
+  onPreviewFile,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -305,11 +308,14 @@ export const MessageRow = memo(function MessageRow({
           </div>
         )}
         {hasAttachments && (
-          <div className="chat-message-attachments">
-            {msg.attachments!.map((att) => (
-              <AttachmentChip key={att.id} attachment={att} />
-            ))}
-          </div>
+          <MessageAttachmentGrid
+            attachments={msg.attachments!}
+            onPreview={
+              onPreviewFile
+                ? (attachment) => onPreviewFile(attachment.id)
+                : undefined
+            }
+          />
         )}
         {msg.isSlashLoader ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -334,7 +340,10 @@ export const MessageRow = memo(function MessageRow({
                     // every subsequent index, which would otherwise re-mount
                     // each downstream MediaSegmentView and re-fire its
                     // `mediaFileExists` probe.
-                    <AgentMarkdown key={`t-${segment.start}`}>
+                    <AgentMarkdown
+                      key={`t-${segment.start}`}
+                      streaming={isLoading && isLast}
+                    >
                       {segment.value}
                     </AgentMarkdown>
                   ) : null

@@ -1265,6 +1265,9 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // File Platform
+  files: import("../shared/files").HermesFilesAPI;
 }
 
 declare global {

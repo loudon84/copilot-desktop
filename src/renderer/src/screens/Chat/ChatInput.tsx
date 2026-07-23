@@ -26,9 +26,16 @@ import {
   filesFromClipboard,
   type AttachmentError,
 } from "./attachmentUtils";
-import { AttachmentChip } from "../../components/AttachmentChip";
+import {
+  ingestBrowserFiles,
+  ingestViaPicker,
+} from "./composerFilePlatform";
+import { AttachmentTray } from "../../components/files";
 import { ContextGauge, type ContextUsage } from "./ContextGauge";
 import type { Attachment } from "../../../../shared/attachments";
+import type { ManagedFileStatus } from "../../../../shared/files";
+import { useFilePicker } from "../../hooks/files/useFilePicker";
+import { useFileJobEvents } from "../../hooks/files/useFileJobEvents";
 
 export interface ChatInputHandle {
   setText(text: string): void;
@@ -63,6 +70,8 @@ interface ChatInputProps {
    * pickers) so they share the composer's single bordered container. */
   toolbarExtras?: React.ReactNode;
   slashCommands?: SlashCommand[];
+  /** Open managed-file preview for a composer attachment id. */
+  onPreviewFile?: (fileId: string) => void;
   onSubmit: (text: string, attachments: Attachment[]) => void;
   onQuickAsk: (text: string, attachments: Attachment[]) => void;
   onAbort: () => void;
@@ -80,6 +89,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       readiness,
       toolbarExtras,
       slashCommands = SLASH_COMMANDS,
+      onPreviewFile,
       onSubmit,
       onQuickAsk,
       onAbort,
@@ -92,11 +102,26 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [slashFilter, setSlashFilter] = useState("");
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
+    const [statusById, setStatusById] = useState<
+      Record<string, ManagedFileStatus>
+    >({});
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
+
+    const trackedFileIds = useMemo(
+      () => attachments.map((a) => a.id),
+      [attachments],
+    );
+    const onJobFailed = useCallback((fileId: string, message: string) => {
+      setAttachmentError(message || `Parse failed (${fileId})`);
+    }, []);
+    useFileJobEvents(setStatusById, {
+      trackedIds: trackedFileIds,
+      onFailed: onJobFailed,
+    });
+
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<HTMLDivElement>(null);
     const slashMenuListRef = useRef<HTMLDivElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const [slashMenuScrollTop, setSlashMenuScrollTop] = useState(0);
     const [slashMenuViewportHeight, setSlashMenuViewportHeight] = useState(
       SLASH_COMMAND_VIEWPORT_HEIGHT,
@@ -177,28 +202,105 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       [t],
     );
 
-    const ingestFiles = useCallback(
-      async (files: File[] | FileList): Promise<AttachmentError[]> => {
-        const { attachments: added, errors } = await processFiles(
-          files,
-          attachments.length,
-          {
-            sessionId: sessionId || undefined,
-            remoteMode: !!remoteMode,
-          },
-        );
-        if (added.length > 0) {
-          setAttachments((prev) => [...prev, ...added]);
+    const applyIngestResult = useCallback(
+      (result: {
+        attachments: Attachment[];
+        statusById: Record<string, ManagedFileStatus>;
+        errors: AttachmentError[];
+        platformErrors: string[];
+      }): AttachmentError[] => {
+        if (result.attachments.length > 0) {
+          setAttachments((prev) => [...prev, ...result.attachments]);
+          setStatusById((prev) => ({ ...prev, ...result.statusById }));
         }
-        if (errors.length > 0) {
-          setAttachmentError(formatError(errors[0]));
+        if (result.errors.length > 0) {
+          setAttachmentError(formatError(result.errors[0]));
+        } else if (result.platformErrors.length > 0) {
+          setAttachmentError(result.platformErrors[0]);
         } else {
           setAttachmentError(null);
         }
-        return errors;
+        return result.errors;
       },
-      [attachments.length, formatError, sessionId, remoteMode],
+      [formatError],
     );
+
+    const ingestFiles = useCallback(
+      async (files: File[] | FileList): Promise<AttachmentError[]> => {
+        const result = await ingestBrowserFiles(
+          files,
+          {
+            profile,
+            sessionId,
+            remoteMode: !!remoteMode,
+          },
+          attachments.length,
+        );
+        // If File Platform returned nothing usable, fall back to legacy path.
+        if (
+          result.attachments.length === 0 &&
+          Array.from(files).length > 0 &&
+          result.errors.length === 0 &&
+          result.platformErrors.length > 0
+        ) {
+          const legacy = await processFiles(files, attachments.length, {
+            sessionId: sessionId || undefined,
+            remoteMode: !!remoteMode,
+          });
+          return applyIngestResult({
+            attachments: legacy.attachments,
+            statusById: {},
+            errors: legacy.errors,
+            platformErrors: [],
+          });
+        }
+        return applyIngestResult(result);
+      },
+      [
+        attachments.length,
+        applyIngestResult,
+        profile,
+        sessionId,
+        remoteMode,
+      ],
+    );
+
+    const filePicker = useFilePicker({
+      context: {
+        profile,
+        sessionId: sessionId || "default",
+        mode: remoteMode ? "remote" : "local",
+        source: "picker",
+      },
+      multiple: true,
+    });
+
+    const handleAttachClick = useCallback(async (): Promise<void> => {
+      const result = await ingestViaPicker(
+        { profile, sessionId, remoteMode: !!remoteMode },
+        attachments.length,
+      );
+      const unavailable = result.platformErrors.some((msg) =>
+        msg.includes("unavailable"),
+      );
+      if (!unavailable) {
+        applyIngestResult(result);
+        return;
+      }
+      // Legacy hidden-input fallback when File Platform picker is unavailable.
+      const picked = await filePicker.pick();
+      if (picked.source === "raw" && picked.files.length > 0) {
+        await ingestFiles(picked.files);
+      }
+    }, [
+      applyIngestResult,
+      attachments.length,
+      filePicker,
+      ingestFiles,
+      profile,
+      remoteMode,
+      sessionId,
+    ]);
 
     useImperativeHandle(
       ref,
@@ -228,6 +330,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         clear(): void {
           setInput("");
           setAttachments([]);
+          setStatusById({});
           setAttachmentError(null);
           if (inputRef.current) inputRef.current.style.height = "auto";
         },
@@ -353,6 +456,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       history.push(text);
       setInput("");
       setAttachments([]);
+      setStatusById({});
       setAttachmentError(null);
       if (inputRef.current) inputRef.current.style.height = "auto";
     }
@@ -468,19 +572,38 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       void ingestFiles(files);
     }
 
-    async function handleFileInputChange(
-      e: React.ChangeEvent<HTMLInputElement>,
-    ): Promise<void> {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-      await ingestFiles(files);
-      // Reset so the same file can be picked again later
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-
     function removeAttachment(id: string): void {
       setAttachments((prev) => prev.filter((a) => a.id !== id));
+      setStatusById((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       setAttachmentError(null);
+    }
+
+    async function handleRetryParse(fileId: string): Promise<void> {
+      const filesApi = window.hermesAPI?.files;
+      if (!filesApi?.retryParse) return;
+      setStatusById((prev) => ({ ...prev, [fileId]: "parsing" }));
+      try {
+        const result = await filesApi.retryParse(profile, fileId);
+        if (result.ok) {
+          const view = await filesApi.getFile(profile, fileId);
+          setStatusById((prev) => ({
+            ...prev,
+            [fileId]: view?.status ?? "ready",
+          }));
+          setAttachmentError(null);
+        } else {
+          setStatusById((prev) => ({ ...prev, [fileId]: "failed" }));
+          setAttachmentError(result.errorMessage || "Parse failed");
+        }
+      } catch (err) {
+        setStatusById((prev) => ({ ...prev, [fileId]: "failed" }));
+        setAttachmentError(err instanceof Error ? err.message : String(err));
+      }
     }
 
     // Pre-send validation gate (#369): even with the queue model from
@@ -630,13 +753,19 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         )}
         {(attachments.length > 0 || attachmentError) && (
           <div className="chat-attachment-strip">
-            {attachments.map((att) => (
-              <AttachmentChip
-                key={att.id}
-                attachment={att}
-                onRemove={() => removeAttachment(att.id)}
-              />
-            ))}
+            <AttachmentTray
+              attachments={attachments}
+              statusById={statusById}
+              onRemove={removeAttachment}
+              onPreview={
+                onPreviewFile
+                  ? (attachment) => onPreviewFile(attachment.id)
+                  : undefined
+              }
+              onRetry={(id) => {
+                void handleRetryParse(id);
+              }}
+            />
             {attachmentError && (
               <div className="chat-attachment-error" role="alert">
                 {attachmentError}
@@ -650,13 +779,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           </div>
         )}
         <div className="chat-input-wrapper">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            style={{ display: "none" }}
-            onChange={handleFileInputChange}
-          />
           <textarea
             ref={inputRef}
             className="chat-input"
@@ -677,8 +799,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           <div className="chat-input-toolbar">
             <button
               className="chat-attach-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
+              onClick={() => {
+                void handleAttachClick();
+              }}
+              disabled={isLoading || filePicker.picking}
               title={t("chat.attach")}
               aria-label={t("chat.attach")}
               type="button"

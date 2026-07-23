@@ -11,6 +11,7 @@ import {
   loadPromptImageAttachments,
   stripTrailingImagePlaceholders,
 } from "./session-attachment-store";
+import { loadManagedMessageAttachments } from "./files/load-managed-message-attachments";
 import {
   deleteSessionContinuationForSession,
   loadSessionContinuationItems,
@@ -631,24 +632,29 @@ export function expandRowsToHistory(rows: RawMessageRow[]): HistoryItem[] {
 export function mergeStoredPromptImageAttachments(
   items: HistoryItem[],
   attachmentsByMessageId: Map<number, Attachment[]>,
+  managedByMessageId?: Map<number, Attachment[]>,
 ): HistoryItem[] {
   return items.map((item) => {
     if (item.kind !== "user") return item;
     const fallback = extractLeadingVisionImageFallback(item.content);
+    const managed = managedByMessageId?.get(item.id);
     const stored = attachmentsByMessageId.get(item.id);
     const fallbackAttachment = attachmentFromLocalVisionImagePath(
       fallback.imagePath,
       `db-fallback-att-${item.id}-0`,
     );
     const nextContent = stripTrailingImagePlaceholders(fallback.content);
+    // Dual-read priority: inline item → ManagedFile associations → legacy image table → vision path.
     const nextAttachments =
       item.attachments && item.attachments.length > 0
         ? item.attachments
-        : stored && stored.length > 0
-          ? stored
-          : fallbackAttachment
-            ? [fallbackAttachment]
-            : undefined;
+        : managed && managed.length > 0
+          ? managed
+          : stored && stored.length > 0
+            ? stored
+            : fallbackAttachment
+              ? [fallbackAttachment]
+              : undefined;
 
     if (
       nextContent === item.content &&
@@ -686,6 +692,7 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
   const canonical = mergeStoredPromptImageAttachments(
     items,
     loadPromptImageAttachments(db, sessionId),
+    loadManagedMessageAttachments(sessionId),
   );
   return applySessionLocalOverlays(sessionId, canonical, db);
 }
@@ -700,6 +707,7 @@ export function applySessionLocalOverlays(
   const canonical = mergeStoredPromptImageAttachments(
     items,
     loadPromptImageAttachments(db, sessionId),
+    loadManagedMessageAttachments(sessionId),
   );
   const withLocalErrors = mergeSessionLocalErrors(
     canonical,

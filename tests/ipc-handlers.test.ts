@@ -5,13 +5,29 @@ import { join } from "path";
 const ROOT = join(__dirname, "..");
 // After the app/ refactor, ipcMain.handle registrations live in the dedicated
 // IPC registration module plus the updater module, not in index.ts.
-const indexSrc = ["src/main/ipc/register.ts", "src/main/app/updater.ts"]
+// File Platform handlers are registered via FILES_IPC_CHANNELS constants in
+// register-file-ipc.ts; preload invokes them from files-api.ts.
+const indexSrc = [
+  "src/main/ipc/register.ts",
+  "src/main/app/updater.ts",
+  "src/main/files/register-file-ipc.ts",
+]
   .map((p) => readFileSync(join(ROOT, p), "utf-8"))
   .join("\n");
-const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
+const preloadSrc = [
+  "src/preload/index.ts",
+  "src/preload/files-api.ts",
+]
+  .map((p) => readFileSync(join(ROOT, p), "utf-8"))
+  .join("\n");
+const filesIpcContractSrc = readFileSync(
+  join(ROOT, "src/shared/files/file-ipc.ts"),
+  "utf-8",
+);
 
 /**
  * Extract all IPC channel names registered in main/index.ts.
+ * Also expands FILES_IPC_CHANNELS.* references via the shared contract.
  */
 function extractIpcHandleChannels(src: string): string[] {
   const channels: string[] = [];
@@ -20,7 +36,24 @@ function extractIpcHandleChannels(src: string): string[] {
   while ((m = re.exec(src)) !== null) {
     channels.push(m[1]);
   }
+  // Expand `ipcMain.handle(FILES_IPC_CHANNELS.foo, ...)` using the contract map.
+  const constMap = extractFilesIpcChannelMap(filesIpcContractSrc);
+  const refRe = /ipcMain\.handle\(\s*FILES_IPC_CHANNELS\.(\w+)/g;
+  while ((m = refRe.exec(src)) !== null) {
+    const resolved = constMap[m[1]];
+    if (resolved) channels.push(resolved);
+  }
   return [...new Set(channels)];
+}
+
+function extractFilesIpcChannelMap(src: string): Record<string, string> {
+  const map: Record<string, string> = {};
+  const re = /(\w+)\s*:\s*["']([^"']+)["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    map[m[1]] = m[2];
+  }
+  return map;
 }
 
 /**
@@ -32,6 +65,12 @@ function extractPreloadInvokeChannels(src: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(src)) !== null) {
     channels.push(m[1]);
+  }
+  const constMap = extractFilesIpcChannelMap(filesIpcContractSrc);
+  const refRe = /ipcRenderer\.invoke\(\s*FILES_IPC_CHANNELS\.(\w+)/g;
+  while ((m = refRe.exec(src)) !== null) {
+    const resolved = constMap[m[1]];
+    if (resolved) channels.push(resolved);
   }
   return [...new Set(channels)];
 }
