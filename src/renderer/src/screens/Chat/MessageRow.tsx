@@ -4,10 +4,15 @@ import { Copy, Check } from "lucide-react";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { OrbLoader } from "../../components/OrbLoader";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
-import { MessageAttachmentGrid } from "../../components/files";
+import {
+  MessageAttachmentGrid,
+  MessageDocumentActions,
+} from "../../components/files";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
+import { isDocumentLikeMessage } from "../../components/files/message/document-message-utils";
+import type { MessageDocumentPreviewInput } from "../../../../shared/files";
 import type { ChatBubbleMessage, ChatMessage } from "./types";
 
 export const APPROVAL_RE =
@@ -168,6 +173,12 @@ interface MessageRowProps {
   agent?: AgentAvatarInfo;
   /** Open File Preview for a managed attachment id. */
   onPreviewFile?: (fileId: string) => void;
+  /** Open in-memory document preview for a long assistant report. */
+  onPreviewDocument?: (input: MessageDocumentPreviewInput) => void;
+  /** Called after createFromMessage succeeds so Session Files can refresh. */
+  onDocumentFileCreated?: (fileId: string) => void;
+  profile?: string;
+  sessionId?: string | null;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -179,6 +190,10 @@ export const MessageRow = memo(function MessageRow({
   showAvatar = true,
   agent,
   onPreviewFile,
+  onPreviewDocument,
+  onDocumentFileCreated,
+  profile,
+  sessionId,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -321,6 +336,24 @@ export const MessageRow = memo(function MessageRow({
             {msg.error}
           </div>
         )}
+        {msg.role === "agent" &&
+          !msg.error &&
+          !isLoading &&
+          !msg.isSlashLoader &&
+          !!msg.content &&
+          isDocumentLikeMessage(msg.content) &&
+          sessionId &&
+          onPreviewDocument &&
+          onDocumentFileCreated && (
+            <MessageDocumentActions
+              profile={profile}
+              sessionId={sessionId}
+              messageId={String(msg.id)}
+              content={msg.content}
+              onPreview={onPreviewDocument}
+              onFileCreated={onDocumentFileCreated}
+            />
+          )}
       </div>
       {bubbleTime && isTimeValid && (
         <time

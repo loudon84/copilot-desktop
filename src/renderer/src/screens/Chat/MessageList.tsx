@@ -3,6 +3,7 @@ import { HermesAvatar, MessageRow } from "./MessageRow";
 import type { AgentAvatarInfo } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
 import { ClarifyCard } from "./ClarifyCard";
+import type { MessageDocumentPreviewInput } from "../../../../shared/files";
 import type {
   ChatMessage,
   ClarifyMessage,
@@ -27,6 +28,10 @@ interface MessageListProps {
    *  the agent's profile picture instead of the loading gif. */
   agentAvatar?: AgentAvatarInfo;
   onPreviewFile?: (fileId: string) => void;
+  onPreviewDocument?: (input: MessageDocumentPreviewInput) => void;
+  onDocumentFileCreated?: (fileId: string) => void;
+  profile?: string;
+  sessionId?: string | null;
 }
 
 function TypingIndicator({
@@ -75,6 +80,10 @@ export const MessageList = memo(function MessageList({
   onClarifyResolved,
   agentAvatar,
   onPreviewFile,
+  onPreviewDocument,
+  onDocumentFileCreated,
+  profile,
+  sessionId,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -168,6 +177,10 @@ export const MessageList = memo(function MessageList({
         showAvatar={showAvatar}
         agent={agentAvatar}
         onPreviewFile={onPreviewFile}
+        onPreviewDocument={onPreviewDocument}
+        onDocumentFileCreated={onDocumentFileCreated}
+        profile={profile}
+        sessionId={sessionId}
       />,
     );
   }

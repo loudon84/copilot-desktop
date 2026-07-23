@@ -9,6 +9,7 @@ export * from "./file-errors";
 export * from "./file-contracts";
 export * from "./file-status";
 export * from "./file-preview";
+export * from "./message-document";
 export * from "./parser-contract";
 export * from "./file-job";
 export * from "./file-ipc";

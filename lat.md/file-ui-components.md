@@ -16,6 +16,20 @@ Composer and History/message image cards use [[src/renderer/src/components/files
 
 Composer and restored message cards call `useFilePreview.openPreview(fileId)` so TXT / image / PDF previews are reachable without the Session Files panel.
 
+`useFilePreview.openMessagePreview` opens an in-memory Markdown document (no `fileId`) via [[src/renderer/src/components/files/preview/MessageDocumentPreview.tsx#MessageDocumentPreview]].
+
+## Message document actions
+
+Long Assistant Markdown reports get an action bar without auto-writing files.
+
+[[src/renderer/src/components/files/message/MessageDocumentActions.tsx#MessageDocumentActions]] appears when [[src/renderer/src/components/files/message/document-message-utils.ts#isDocumentLikeMessage]] is true. Preview opens the panel; Save / Add call `files.createFromMessage` then refresh Session Files.
+
+## Message document preview
+
+In-memory Markdown preview for reports that are not yet ManagedFiles.
+
+[[src/renderer/src/components/files/preview/MessageDocumentPreview.tsx#MessageDocumentPreview]] renders via RichContentRenderer; used when `useFilePreview.openMessagePreview` opens a message-document source.
+
 ## Agent output card
 
 [[src/renderer/src/components/files/message/AgentOutputFileCard.tsx#AgentOutputFileCard]] renders non-image agent paths detected by media token parsing. Missing files show an explicit state; cards never auto-register arbitrary paths (registration is Main-only via `registerAgentOutputFile` for workspace/profile paths).

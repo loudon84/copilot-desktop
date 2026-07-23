@@ -14,6 +14,10 @@ import type {
   ManagedFileView,
   ParsedDocument,
 } from "./managed-file";
+import type {
+  CreateFileFromMessageInput,
+  CreateFileFromMessageResult,
+} from "./message-document";
 
 export interface FilePickerOptions {
   multiple?: boolean;
@@ -163,6 +167,15 @@ export interface HermesFilesAPI {
     fileId: string,
   ): Promise<string | null>;
 
+  /**
+   * Persist an Assistant Message body as a ManagedFile with role agent-output.
+   * Idempotent per (sessionId, messageId, role) — returns alreadyExisted when
+   * the association already exists.
+   */
+  createFromMessage(
+    input: CreateFileFromMessageInput,
+  ): Promise<CreateFileFromMessageResult>;
+
   deleteAssociation(input: DeleteFileAssociationInput): Promise<void>;
 
   /** Best-effort orphan/temp cleanup for the profile's managed files. */
@@ -195,6 +208,7 @@ export const FILES_IPC_CHANNELS = {
   openExternal: "files:open-external",
   revealInFolder: "files:reveal-in-folder",
   saveAs: "files:save-as",
+  createFromMessage: "files:create-from-message",
   deleteAssociation: "files:delete-association",
   cleanup: "files:cleanup",
 } as const;

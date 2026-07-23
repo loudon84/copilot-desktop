@@ -2,6 +2,8 @@
  * Preview descriptor contracts for the File Preview Panel.
  */
 
+import type { MessageDocumentPreviewInput } from "./message-document";
+
 export type PreviewType =
   | "image"
   | "text"
@@ -11,6 +13,23 @@ export type PreviewType =
   | "html"
   | "office"
   | "unsupported";
+
+/**
+ * Where preview content comes from: a stored ManagedFile, or an in-memory
+ * Assistant Message document (no physical file yet).
+ */
+export type FilePreviewSource =
+  | {
+      type: "managed-file";
+      fileId: string;
+    }
+  | {
+      type: "message-document";
+      sessionId: string;
+      messageId: string;
+      title: string;
+      content: string;
+    };
 
 export interface FilePreviewDescriptor {
   fileId: string;
@@ -35,6 +54,8 @@ export interface FilePreviewDescriptor {
   canRetryParse: boolean;
   unsupportedReason?: string;
 }
+
+export type { MessageDocumentPreviewInput };
 
 export interface FilePreviewOptions {
   /** Byte offset for text/code/markdown/html ranged reads. */

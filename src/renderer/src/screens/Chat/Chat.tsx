@@ -246,10 +246,12 @@ function Chat({
   const {
     state: filePreviewState,
     openPreview,
+    openMessagePreview,
     closePreview,
     retry: retryFilePreview,
     loadMore: loadMoreFilePreview,
   } = useFilePreview();
+  const [sessionFilesRefreshKey, setSessionFilesRefreshKey] = useState(0);
   const [folderPickerOpen, setFolderPickerOpen] = useState<boolean>(false);
   const [webPreviewVisible, setWebPreviewVisible] = useState<boolean>(false);
   const [webPreviewUrl, setWebPreviewUrl] =
@@ -1053,6 +1055,13 @@ function Chat({
               onClarifyResolved={handleClarifyResolved}
               agentAvatar={agentAvatar}
               onPreviewFile={(fileId) => void openPreview(fileId, profile)}
+              onPreviewDocument={openMessagePreview}
+              onDocumentFileCreated={(fileId) => {
+                setSessionFilesRefreshKey((k) => k + 1);
+                void openPreview(fileId, profile);
+              }}
+              profile={profile}
+              sessionId={hermesSessionId}
             />
           )}
           <div ref={bottomRef} />
@@ -1062,6 +1071,7 @@ function Chat({
           <SessionFilesPanel
             profile={profile}
             sessionId={hermesSessionId}
+            refreshKey={sessionFilesRefreshKey}
             onPreview={(fileId) => void openPreview(fileId, profile)}
           />
         )}
@@ -1078,6 +1088,10 @@ function Chat({
             onClose={closePreview}
             onRetry={retryFilePreview}
             onLoadMore={() => void loadMoreFilePreview()}
+            onMessageFileCreated={(fileId) => {
+              setSessionFilesRefreshKey((k) => k + 1);
+              void openPreview(fileId, profile);
+            }}
           />
         )}
 

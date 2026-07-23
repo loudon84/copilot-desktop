@@ -11,6 +11,8 @@ import {
   type AddFileToContextInput,
   type AttachFileToMessageInput,
   type ClipboardFileInput,
+  type CreateFileFromMessageInput,
+  type CreateFileFromMessageResult,
   type DetachFileFromMessageInput,
   type FileAssociation,
   type FileAssociationRole,
@@ -60,6 +62,7 @@ import { getSessionContextFolder } from "../session-context-folder-store";
 import { profileHome } from "../utils";
 import { importOnePath, stageClipboardImport } from "./file-import-service";
 import { nowIso, toManagedFileView } from "./file-metadata";
+import { createFromMessage as createAgentOutputFromMessage } from "./agent-output/agent-output-service";
 
 function profileOrDefault(profile?: string): string {
   return normalizeProfileId(profile);
@@ -372,6 +375,12 @@ export const fileService: HermesFilesAPI = {
   async saveAs(profile: string | undefined, fileId: string): Promise<string | null> {
     const { file, path } = resolveManagedFilePath(profile, fileId);
     return saveFileAs(path, file.name);
+  },
+
+  async createFromMessage(
+    input: CreateFileFromMessageInput,
+  ): Promise<CreateFileFromMessageResult> {
+    return createAgentOutputFromMessage(input);
   },
 
   async deleteAssociation(input): Promise<void> {

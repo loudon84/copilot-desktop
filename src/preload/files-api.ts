@@ -87,6 +87,9 @@ export function createFilesApi(): HermesFilesAPI {
     saveAs: (profile, fileId) =>
       ipcRenderer.invoke(FILES_IPC_CHANNELS.saveAs, profile, fileId),
 
+    createFromMessage: (input) =>
+      ipcRenderer.invoke(FILES_IPC_CHANNELS.createFromMessage, input),
+
     deleteAssociation: (input) =>
       ipcRenderer.invoke(FILES_IPC_CHANNELS.deleteAssociation, input),
 

@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { BookmarkPlus, RotateCw } from "lucide-react";
+import { BookmarkPlus, RotateCw, Download, FilePlus2 } from "lucide-react";
+import type { MessageDocumentPreviewInput } from "../../../../../shared/files";
 import type { FilePreviewState } from "../../../hooks/files/useFilePreview";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { FilePreviewError } from "./FilePreviewError";
 import { FilePreviewRouter } from "./FilePreviewRouter";
+import { MessageDocumentPreview } from "./MessageDocumentPreview";
 
 interface FilePreviewPanelProps {
   state: FilePreviewState;
@@ -13,6 +15,8 @@ interface FilePreviewPanelProps {
   onClose: () => void;
   onRetry: () => void;
   onLoadMore?: () => void;
+  /** After creating a file from a message document, open managed preview. */
+  onMessageFileCreated?: (fileId: string) => void;
 }
 
 const MIN_PANEL_WIDTH = 320;
@@ -20,7 +24,7 @@ const WIDTH_STORAGE_KEY = "hermes:filePreviewWidth";
 const maxPanelWidth = (): number =>
   Math.max(MIN_PANEL_WIDTH, window.innerWidth - 360);
 
-/** Right-side panel that previews a managed file (image/text/markdown/code/pdf/office/unsupported). */
+/** Right-side panel that previews a managed file or an in-memory message document. */
 // @lat: [[file-platform#File preview]]
 export function FilePreviewPanel({
   state,
@@ -29,6 +33,7 @@ export function FilePreviewPanel({
   onClose,
   onRetry,
   onLoadMore,
+  onMessageFileCreated,
 }: FilePreviewPanelProps): React.JSX.Element {
   const [width, setWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(WIDTH_STORAGE_KEY));
@@ -37,6 +42,7 @@ export function FilePreviewPanel({
   const [isResizing, setIsResizing] = useState(false);
   const [contextBusy, setContextBusy] = useState(false);
   const [parseBusy, setParseBusy] = useState(false);
+  const [docBusy, setDocBusy] = useState(false);
 
   const startResize = (e: React.PointerEvent): void => {
     e.preventDefault();
@@ -49,7 +55,10 @@ export function FilePreviewPanel({
 
     const onMove = (ev: PointerEvent): void => {
       const delta = startX - ev.clientX;
-      nextWidth = Math.min(maxPanelWidth(), Math.max(MIN_PANEL_WIDTH, startWidth + delta));
+      nextWidth = Math.min(
+        maxPanelWidth(),
+        Math.max(MIN_PANEL_WIDTH, startWidth + delta),
+      );
       setWidth(nextWidth);
     };
     const onUp = (): void => {
@@ -65,6 +74,7 @@ export function FilePreviewPanel({
   };
 
   const fileId = state.fileId;
+  const isMessageDoc = !!state.messageDocument;
 
   const handleOpenExternal = (): void => {
     if (!fileId) return;
@@ -77,6 +87,32 @@ export function FilePreviewPanel({
   const handleSaveAs = (): void => {
     if (!fileId) return;
     void window.hermesAPI.files.saveAs(profile, fileId);
+  };
+
+  const createFromMessageDoc = async (
+    source: MessageDocumentPreviewInput,
+    thenSaveAs: boolean,
+  ): Promise<void> => {
+    if (docBusy) return;
+    setDocBusy(true);
+    try {
+      const result = await window.hermesAPI.files.createFromMessage({
+        profile,
+        sessionId: source.sessionId,
+        messageId: source.messageId,
+        title: source.title,
+        content: source.content,
+        extension: "md",
+      });
+      onMessageFileCreated?.(result.file.id);
+      if (thenSaveAs) {
+        await window.hermesAPI.files.saveAs(profile, result.file.id);
+      }
+    } catch {
+      /* surfaced via toast elsewhere if needed */
+    } finally {
+      setDocBusy(false);
+    }
   };
 
   const canAddToContext =
@@ -113,44 +149,85 @@ export function FilePreviewPanel({
       />
       <FilePreviewHeader
         descriptor={state.descriptor}
+        fallbackTitle={state.messageDocument?.title}
+        messageMode={isMessageDoc}
         onOpenExternal={handleOpenExternal}
         onReveal={handleReveal}
-        onSaveAs={handleSaveAs}
+        onSaveAs={
+          isMessageDoc && state.messageDocument
+            ? () => void createFromMessageDoc(state.messageDocument!, true)
+            : handleSaveAs
+        }
         onClose={onClose}
+        saveAsDisabled={isMessageDoc ? docBusy : undefined}
       />
       <div className="file-preview-body">
         {state.error ? (
           <FilePreviewError message={state.error} onRetry={onRetry} />
+        ) : isMessageDoc && state.messageDocument ? (
+          <MessageDocumentPreview
+            title={state.messageDocument.title}
+            markdown={state.messageDocument.content}
+          />
         ) : (
           <FilePreviewRouter state={state} onLoadMore={onLoadMore} />
         )}
       </div>
-      <div className="file-preview-footer">
-        <button
-          type="button"
-          className="file-preview-footer-btn"
-          disabled={!canAddToContext || contextBusy}
-          title={
-            sessionId
-              ? "Add to session context"
-              : "Open a session to add this file to context"
-          }
-          onClick={handleAddToContext}
-        >
-          <BookmarkPlus size={13} />
-          Add to context
-        </button>
-        <button
-          type="button"
-          className="file-preview-footer-btn"
-          disabled={!canRetryParse || parseBusy}
-          title="Retry parse"
-          onClick={handleRetryParse}
-        >
-          <RotateCw size={13} />
-          Retry parse
-        </button>
-      </div>
+      {isMessageDoc && state.messageDocument ? (
+        <div className="file-preview-footer">
+          <button
+            type="button"
+            className="file-preview-footer-btn"
+            disabled={docBusy}
+            title="Save as Markdown"
+            onClick={() =>
+              void createFromMessageDoc(state.messageDocument!, true)
+            }
+          >
+            <Download size={13} />
+            Save as .md
+          </button>
+          <button
+            type="button"
+            className="file-preview-footer-btn"
+            disabled={docBusy}
+            title="Add to session files"
+            onClick={() =>
+              void createFromMessageDoc(state.messageDocument!, false)
+            }
+          >
+            <FilePlus2 size={13} />
+            Add to session files
+          </button>
+        </div>
+      ) : (
+        <div className="file-preview-footer">
+          <button
+            type="button"
+            className="file-preview-footer-btn"
+            disabled={!canAddToContext || contextBusy}
+            title={
+              sessionId
+                ? "Add to session context"
+                : "Open a session to add this file to context"
+            }
+            onClick={handleAddToContext}
+          >
+            <BookmarkPlus size={13} />
+            Add to context
+          </button>
+          <button
+            type="button"
+            className="file-preview-footer-btn"
+            disabled={!canRetryParse || parseBusy}
+            title="Retry parse"
+            onClick={handleRetryParse}
+          >
+            <RotateCw size={13} />
+            Retry parse
+          </button>
+        </div>
+      )}
     </div>
   );
 }

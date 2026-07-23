@@ -98,6 +98,14 @@ export {
   registerAgentOutputFile,
 } from "./file-service";
 
+export { createFromMessage } from "./agent-output/agent-output-service";
+export {
+  sanitizeGeneratedFileName,
+  createGeneratedFileName,
+  resolveUniqueFileName,
+  sanitizeSessionDirSegment,
+} from "./agent-output/generated-file-name";
+
 export { registerFilesIpcHandlers } from "./register-file-ipc";
 
 export {

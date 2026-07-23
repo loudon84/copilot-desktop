@@ -14,6 +14,8 @@ import { searchSessionManagedFiles } from "./session-file-actions";
 export interface SessionFilesPanelProps {
   profile?: string;
   sessionId: string;
+  /** Bump to force a re-fetch (e.g. after createFromMessage). */
+  refreshKey?: number;
   onPreview?: (fileId: string) => void;
 }
 
@@ -108,11 +110,18 @@ function SearchResults({
 export function SessionFilesPanel({
   profile,
   sessionId,
+  refreshKey = 0,
   onPreview,
 }: SessionFilesPanelProps): React.JSX.Element {
-  const { groups, loading, error, addToContext, removeFromContext } =
+  const { groups, loading, error, addToContext, removeFromContext, refresh } =
     useSessionFiles(profile, sessionId);
   const contextFileIds = new Set(groups.contextFiles.map((f) => f.id));
+
+  useEffect(() => {
+    if (refreshKey > 0) {
+      void refresh();
+    }
+  }, [refreshKey, refresh]);
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");

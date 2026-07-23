@@ -56,6 +56,12 @@ Text/code/markdown/html previews accept optional `offset`/`limit` ([[src/shared/
 
 [[src/main/files/file-operation-service.ts]] provides OS open / reveal-in-folder / Save As for managed files via Electron `shell` and dialogs, keeping absolute paths in Main only.
 
+## AgentOutputService
+
+[[src/main/files/agent-output/agent-output-service.ts#createFromMessage]] turns Assistant Message Markdown into a ManagedFile under `desktop/files/generated/<sessionId>/`.
+
+It sanitizes titles via [[src/main/files/agent-output/generated-file-name.ts#sanitizeGeneratedFileName]], never overwrites on name collision, upserts `source: agent-output` + association `role: agent-output`, and is idempotent per `(sessionId, messageId)`.
+
 ## Parser Registry
 
 [[src/main/files/file-parser-registry.ts#FileParserRegistry]] picks the highest-priority [[src/shared/files/parser-contract.ts#FileParser]]; denied extensions always use fallback (path-ref only).

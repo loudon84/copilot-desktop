@@ -101,6 +101,11 @@ export function registerFilesIpcHandlers(ipcMain: IpcMain): void {
       fileService.saveAs(profile, fileId),
   );
   ipcMain.handle(
+    FILES_IPC_CHANNELS.createFromMessage,
+    (_e, input: import("../../shared/files").CreateFileFromMessageInput) =>
+      fileService.createFromMessage(input),
+  );
+  ipcMain.handle(
     FILES_IPC_CHANNELS.deleteAssociation,
     (_e, input) => fileService.deleteAssociation(input),
   );

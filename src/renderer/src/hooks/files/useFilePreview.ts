@@ -7,6 +7,7 @@ import { useCallback, useRef, useState } from "react";
 import type {
   FilePreviewDescriptor,
   FilePreviewOptions,
+  MessageDocumentPreviewInput,
 } from "../../../../shared/files";
 
 export interface FilePreviewState {
@@ -16,11 +17,14 @@ export interface FilePreviewState {
   descriptor?: FilePreviewDescriptor;
   error?: string;
   loadingMore?: boolean;
+  /** In-memory message document (preview without creating a file). */
+  messageDocument?: MessageDocumentPreviewInput;
 }
 
 export interface UseFilePreviewResult {
   state: FilePreviewState;
   openPreview: (fileId: string, profile?: string) => Promise<void>;
+  openMessagePreview: (source: MessageDocumentPreviewInput) => void;
   closePreview: () => void;
   retry: () => void;
   loadMore: () => Promise<void>;
@@ -46,9 +50,18 @@ export function useFilePreview(): UseFilePreviewResult {
       const requestId = ++requestIdRef.current;
       lastArgsRef.current = { fileId, profile };
       if (append) {
-        setState((prev) => ({ ...prev, loadingMore: true }));
+        setState((prev) => ({
+          ...prev,
+          messageDocument: undefined,
+          loadingMore: true,
+        }));
       } else {
-        setState({ open: true, fileId, loading: true });
+        setState({
+          open: true,
+          fileId,
+          loading: true,
+          messageDocument: undefined,
+        });
       }
       try {
         const result = await window.hermesAPI.files.getPreview(
@@ -108,6 +121,31 @@ export function useFilePreview(): UseFilePreviewResult {
     [load],
   );
 
+  const openMessagePreview = useCallback(
+    (source: MessageDocumentPreviewInput) => {
+      requestIdRef.current += 1;
+      lastArgsRef.current = null;
+      setState({
+        open: true,
+        loading: false,
+        messageDocument: source,
+        descriptor: {
+          fileId: "",
+          type: "markdown",
+          title: source.title,
+          content: source.content,
+          mime: "text/markdown",
+          canOpenExternal: false,
+          canSaveAs: true,
+          canCopyText: true,
+          canAddToContext: false,
+          canRetryParse: false,
+        },
+      });
+    },
+    [],
+  );
+
   const closePreview = useCallback(() => {
     requestIdRef.current += 1;
     lastArgsRef.current = null;
@@ -127,5 +165,12 @@ export function useFilePreview(): UseFilePreviewResult {
     await load(args.fileId, args.profile, { offset: next }, true);
   }, [load, state.descriptor?.nextOffset]);
 
-  return { state, openPreview, closePreview, retry, loadMore };
+  return {
+    state,
+    openPreview,
+    openMessagePreview,
+    closePreview,
+    retry,
+    loadMore,
+  };
 }

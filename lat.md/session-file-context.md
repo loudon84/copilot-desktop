@@ -22,6 +22,8 @@ Small files inline full text (≤ `maxInlineTextChars` from [[src/main/files/fil
 
 The panel search box debounces to `searchSessionFiles`; hits show filename + snippet and open the existing Preview by `fileId`. Empty query restores the three-section list.
 
+`refreshKey` from Chat forces a re-fetch after `files.createFromMessage` so Agent output updates without waiting for a session switch.
+
 ## FTS chunking
 
 [[src/main/files/file-chunking.ts#chunkText]] indexes parsed text with structure-aware splits (heading → paragraph → newline → sentence → fixed window) and configurable overlap for Session file search.

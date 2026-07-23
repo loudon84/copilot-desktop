@@ -53,6 +53,14 @@ export {
   type MessageImageCardProps,
 } from "./message/MessageImageCard";
 export {
+  MessageDocumentActions,
+  type MessageDocumentActionsProps,
+} from "./message/MessageDocumentActions";
+export {
+  isDocumentLikeMessage,
+  extractDocumentTitle,
+} from "./message/document-message-utils";
+export {
   FileContextMenu,
   type FileContextMenuProps,
 } from "./common/FileContextMenu";
@@ -66,6 +74,10 @@ export {
   type FilePreviewHeaderProps,
 } from "./preview/FilePreviewHeader";
 export { FilePreviewError } from "./preview/FilePreviewError";
+export {
+  MessageDocumentPreview,
+  type MessageDocumentPreviewProps,
+} from "./preview/MessageDocumentPreview";
 export { formatFileSize } from "./composer/file-card-utils";
 export {
   AgentOutputFileCard,
