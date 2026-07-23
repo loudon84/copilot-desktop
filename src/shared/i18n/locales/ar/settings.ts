@@ -17,6 +17,7 @@ export default {
     connection: "الاتصال",
     network: "الشبكة",
     data: "البيانات",
+    runtime: "Runtime",
     about: "حول والتحديثات",
     community: "المجتمع",
     logs: "السجلات والتشخيص",

@@ -2,7 +2,11 @@ import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { execFile } from "child_process";
-import { HERMES_HOME, HERMES_PYTHON, hermesCliArgs } from "./installer";
+import {
+  HERMES_HOME,
+  HERMES_PYTHON,
+  hermesCliArgs,
+} from "./runtime/hermes-runtime-paths";
 import { profileHome } from "./utils";
 import {
   isRemoteMode,

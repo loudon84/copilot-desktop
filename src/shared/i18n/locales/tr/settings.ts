@@ -17,6 +17,7 @@ export default {
     connection: "Bağlantı",
     network: "Ağ",
     data: "Veri",
+    runtime: "Runtime",
     about: "Hakkında ve Güncellemeler",
     community: "Topluluk",
     logs: "Günlükler ve Tanılama",

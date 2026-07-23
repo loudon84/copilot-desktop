@@ -17,6 +17,7 @@ export default {
     connection: "חיבור",
     network: "רשת",
     data: "נתונים",
+    runtime: "Runtime",
     about: "אודות ועדכונים",
     community: "קהילה",
     logs: "יומנים ואבחון",

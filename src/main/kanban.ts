@@ -5,7 +5,7 @@ import {
   HERMES_PYTHON,
   hermesCliArgs,
   getEnhancedPath,
-} from "./installer";
+} from "./runtime/hermes-runtime-paths";
 import { isRemoteOnlyMode } from "./hermes";
 import { getConnectionConfig } from "./config";
 import { sshRunKanban, sshListClaw3dHqTasks } from "./ssh-remote";

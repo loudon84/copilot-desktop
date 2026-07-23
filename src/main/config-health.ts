@@ -29,7 +29,7 @@ import {
   upsertBlockChild,
 } from "./config";
 import { safeWriteFile } from "./utils";
-import { HERMES_HOME } from "./installer";
+import { HERMES_HOME } from "./runtime/hermes-runtime-paths";
 import { expectedEnvKeyForModel } from "./installer";
 import { expectedEnvKeyForUrl, isLocalBaseUrl } from "../shared/url-key-map";
 import { findSiblingHermesHomes } from "./wsl-detection";

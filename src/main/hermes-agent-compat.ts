@@ -10,7 +10,7 @@ import {
 import { join } from "path";
 import { Buffer } from "buffer";
 import type { SshConfig } from "./ssh-tunnel";
-import { HERMES_HOME, HERMES_REPO } from "./installer";
+import { HERMES_HOME, HERMES_REPO } from "./runtime/hermes-runtime-paths";
 import { sshExec } from "./ssh-remote";
 
 export const HERMES_AGENT_COMPAT_VERSION =

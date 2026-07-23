@@ -17,6 +17,7 @@ export default {
     connection: "Koneksi",
     network: "Jaringan",
     data: "Data",
+    runtime: "Runtime",
     about: "Tentang & Pembaruan",
     community: "Komunitas",
     logs: "Log & Diagnostik",

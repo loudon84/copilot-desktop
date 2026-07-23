@@ -5,9 +5,9 @@ import {
   hermesCliArgs,
   HERMES_PYTHON,
   HERMES_SCRIPT,
-} from "../src/main/installer";
+} from "../src/main/runtime/hermes-runtime-paths";
 
-describe("installer platform wiring", () => {
+describe("hermes runtime platform wiring", () => {
   it("uses the platform path delimiter in the enhanced PATH", () => {
     const enhancedPath = getEnhancedPath();
 
@@ -20,9 +20,6 @@ describe("installer platform wiring", () => {
 
     if (process.platform === "win32") {
       expect(args).toEqual(["-m", "hermes_cli.main", "--version"]);
-      // Use `pythonw.exe` (Windows-subsystem) instead of `python.exe` so
-      // child spawns don't flash a blank console window before
-      // `windowsHide`/CREATE_NO_WINDOW takes effect — see issue #342.
       expect(HERMES_PYTHON).toMatch(/venv[\\/]Scripts[\\/]pythonw\.exe$/);
       expect(HERMES_SCRIPT).toMatch(/venv[\\/]Scripts[\\/]hermes\.exe$/);
       return;

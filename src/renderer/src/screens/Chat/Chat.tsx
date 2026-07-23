@@ -39,6 +39,7 @@ import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
 import { reconcileSlashCatalog } from "./slash/commandCatalog";
+import { useRuntimeOptional } from "../../runtime/use-runtime";
 import {
   DESKTOP_SLASH_COMMANDS,
   LOCAL_DESKTOP_SLASH_COMMANDS,
@@ -187,6 +188,10 @@ function Chat({
     "auto" | "dashboard" | "legacy"
   >("auto");
   const [connectionModeLoaded, setConnectionModeLoaded] = useState(false);
+  const runtime = useRuntimeOptional();
+  // Remote/SSH skip local Runtime probe at bootstrap; only gate local mode.
+  const runtimeReady =
+    connectionMode !== "local" || runtime === null || runtime.ready;
   // Working folder bound to this conversation (issue #27). Per-conversation;
   // persisted per session so a re-opened conversation restores its folder, and
   // reset on new chat below.
@@ -415,6 +420,20 @@ function Chat({
       cancelled = true;
     };
   }, [profile, chatCurrentModel, chatCurrentProvider, chatCurrentBaseUrl]);
+
+  const effectiveReadiness = useMemo(() => {
+    if (!runtimeReady) {
+      return {
+        ok: false,
+        code: "GATEWAY_DOWN",
+        message:
+          runtime?.error ||
+          "Hermes Gateway is not connected. Reconnect before sending.",
+        fixLocation: "gateway",
+      };
+    }
+    return readiness;
+  }, [runtimeReady, runtime?.error, readiness]);
 
   // Authoritative context-window size for the active model, resolved from the
   // provider's /models catalogue (issue #597). Null until/unless the provider
@@ -775,6 +794,13 @@ function Chat({
 
   const handleSubmitOrQueue = useCallback(
     (text: string, attachments: Attachment[]) => {
+      if (!runtimeReady) {
+        toast.error(
+          runtime?.error ||
+            "Hermes Gateway is not connected. Reconnect before sending.",
+        );
+        return;
+      }
       // Side questions (`/btw`) run on a concurrent background agent, so they
       // must never queue — fire them immediately even while the main turn is in
       // flight. This is the whole point of "ask without affecting context".
@@ -799,7 +825,7 @@ function Chat({
       }
       void handleSendRef.current(text, attachments);
     },
-    [isLoading],
+    [isLoading, runtimeReady, runtime?.error],
   );
 
   const handleSuggestion = useCallback((text: string) => {
@@ -1077,7 +1103,7 @@ function Chat({
           remoteMode={remoteMode}
           profile={profile}
           contextUsage={contextUsage}
-          readiness={readiness}
+          readiness={effectiveReadiness}
           slashCommands={slashMenuCommands}
           onSubmit={handleSubmitOrQueue}
           onQuickAsk={actions.handleQuickAsk}

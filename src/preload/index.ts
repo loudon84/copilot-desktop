@@ -29,12 +29,16 @@ import type {
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type {
+  HermesRuntimeConnectionResult,
+  HermesRuntimeProbe,
+} from "../shared/runtime/runtime-contract";
 import { createFilesApi } from "./files-api";
 import type { HermesFilesAPI } from "../shared/files";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
- * (src/preload/index.d.ts) â€” preload is type-checked under
+ * (src/preload/index.d.ts) â€?preload is type-checked under
  * tsconfig.node.json which doesn't include the .d.ts. See #367.
  */
 interface CredentialPoolEntry {
@@ -93,30 +97,39 @@ const electronAPI = {
 };
 
 const hermesAPI = {
-  // Installation
-  checkInstall: (): Promise<{
-    installed: boolean;
-    configured: boolean;
-    hasApiKey: boolean;
-  }> => ipcRenderer.invoke("check-install"),
+  // Local Hermes Runtime connection
+  runtimeProbeLocal: (profile?: string): Promise<HermesRuntimeProbe> =>
+    ipcRenderer.invoke("runtime-probe-local", profile),
 
-  verifyInstall: (): Promise<boolean> => ipcRenderer.invoke("verify-install"),
+  runtimeEnsureLocalReady: (
+    profile?: string,
+  ): Promise<HermesRuntimeConnectionResult> =>
+    ipcRenderer.invoke("runtime-ensure-local-ready", profile),
 
-  startInstall: (): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("start-install"),
+  runtimeGetStatus: (profile?: string): Promise<HermesRuntimeProbe> =>
+    ipcRenderer.invoke("runtime-get-status", profile),
 
-  // Pre-install inspection + "use an existing installation" (issue #272)
-  inspectInstallTarget: (): Promise<{
-    hermesHome: string;
-    repoPath: string;
-    state: "fresh" | "update" | "replace";
-  }> => ipcRenderer.invoke("inspect-install-target"),
+  runtimeRestart: (
+    profile?: string,
+  ): Promise<HermesRuntimeConnectionResult> =>
+    ipcRenderer.invoke("runtime-restart", profile),
 
-  validateHermesHome: (dir: string): Promise<boolean> =>
-    ipcRenderer.invoke("validate-hermes-home", dir),
+  runtimeValidateHome: (dir: string): Promise<boolean> =>
+    ipcRenderer.invoke("runtime-validate-home", dir),
 
-  adoptHermesHome: (dir: string): Promise<boolean> =>
-    ipcRenderer.invoke("adopt-hermes-home", dir),
+  runtimeAdoptHome: (dir: string): Promise<boolean> =>
+    ipcRenderer.invoke("runtime-adopt-home", dir),
+
+  onRuntimeStatusChanged: (
+    callback: (probe: HermesRuntimeProbe) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      probe: unknown,
+    ): void => callback(probe as HermesRuntimeProbe);
+    ipcRenderer.on("runtime-status-changed", handler);
+    return () => ipcRenderer.removeListener("runtime-status-changed", handler);
+  },
 
   quitApp: (): Promise<void> => ipcRenderer.invoke("quit-app"),
 
@@ -129,6 +142,7 @@ const hermesAPI = {
 
   relaunchApp: (): Promise<void> => ipcRenderer.invoke("relaunch-app"),
 
+  // Hermes Agent update progress (legacy channel name; not install)
   onInstallProgress: (
     callback: (progress: {
       step: number;
@@ -221,7 +235,7 @@ const hermesAPI = {
   getHermesOneCredits: (): Promise<HermesOneCreditsResult> =>
     ipcRenderer.invoke("hermesone-credits"),
 
-  // Cloud agent sync (profiles â†” signed-in Hermes One account)
+  // Cloud agent sync (profiles â†?signed-in Hermes One account)
   syncAgents: (): Promise<AgentSyncResult> =>
     ipcRenderer.invoke("agent-sync-run"),
   getAgentSyncStatus: (): Promise<AgentSyncStatus> =>
@@ -509,7 +523,7 @@ const hermesAPI = {
   copyToClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke("copy-to-clipboard", text),
 
-  // Media (agent-generated images / files â€” issue #299)
+  // Media (agent-generated images / files â€?issue #299)
   readMediaFile: (filePath: string): Promise<string | null> =>
     ipcRenderer.invoke("read-media-file", filePath),
   saveMediaFile: (src: string, name: string): Promise<boolean> =>
@@ -526,7 +540,7 @@ const hermesAPI = {
 
   // Resolve the absolute filesystem path for a File coming from drag-drop
   // or the file picker.  Returns "" for blobs that have no origin path
-  // (e.g. clipboard paste) â€” caller should stageAttachment for those.
+  // (e.g. clipboard paste) â€?caller should stageAttachment for those.
   getPathForFile: (file: File): string => {
     try {
       return webUtils.getPathForFile(file) || "";
@@ -555,7 +569,7 @@ const hermesAPI = {
     status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
     cached: boolean;
     /** Subset of `models` flagged as free per the provider catalog
-     *  (Nous Portal today). Optional â€” providers without pricing
+     *  (Nous Portal today). Optional â€?providers without pricing
      *  metadata return undefined. Issue #367. */
     freeModels?: string[];
   }> =>
@@ -593,7 +607,7 @@ const hermesAPI = {
     return () => ipcRenderer.removeListener("chat-chunk", handler);
   },
 
-  /** Streaming reasoning / thinking tokens â€” separate from `onChatChunk`
+  /** Streaming reasoning / thinking tokens â€?separate from `onChatChunk`
    *  so the renderer can render a "thinking" bubble that grows
    *  independently of the assistant's content (#352). */
   onChatReasoningChunk: (
@@ -1094,7 +1108,7 @@ const hermesAPI = {
   // Credential Pool (profile-aware: reads/writes the named profile's
   // auth.json; defaults to the currently active profile when omitted)
   //
-  // Pool entries follow the upstream engine schema (issue #367) â€”
+  // Pool entries follow the upstream engine schema (issue #367) â€?
   // `access_token` for the secret, `auth_type` to distinguish OAuth
   // from API key, plus `id`/`priority`/`source` for rotation.
   getCredentialPool: (
@@ -1654,7 +1668,7 @@ const hermesAPI = {
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
 
-  // File Platform (nested API â€” Phase 0+)
+  // File Platform (nested API â€?Phase 0+)
   files: createFilesApi() as HermesFilesAPI,
 };
 

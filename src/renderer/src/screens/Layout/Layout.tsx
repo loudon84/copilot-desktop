@@ -32,7 +32,6 @@ import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
-import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { useSettingsModal } from "../../components/settings/SettingsModalContext";
 import {
   Compass,
@@ -86,17 +85,7 @@ const FOOTER_NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
 const SIDEBAR_COLLAPSED_KEY = "hermes.sidebar.collapsed";
 const SIDEBAR_SCROLLBAR_HIDE_MS = 700;
 
-interface LayoutProps {
-  verifyWarning?: boolean;
-  onReinstall?: () => void;
-  onDismissVerifyWarning?: () => void;
-}
-
-function Layout({
-  verifyWarning,
-  onReinstall,
-  onDismissVerifyWarning,
-}: LayoutProps = {}): React.JSX.Element {
+function Layout(): React.JSX.Element {
   const { t } = useI18n();
   const { openSettings } = useSettingsModal();
   const [view, setView] = useState<View>("chat");
@@ -468,15 +457,22 @@ function Layout({
 
   const handleSelectProfile = useCallback(
     (name: string) => {
-      // Selecting an agent is administrative: switch the active profile (the
-      // component already started its gateway via setActiveProfile). Existing
-      // chats remain on their original profile, but the visible chat must move
-      // to a scratch run for the selected profile so the footer and transport
-      // never point at different agents.
+      // Selecting an agent is administrative: switch the active profile.
+      // Existing chats remain on their original profile, but the visible chat
+      // must move to a scratch run for the selected profile so the footer and
+      // transport never point at different agents.
       setActiveProfile(name);
       const next = selectProfileRunTransition(runs, activeRunId, name);
       setRuns(next.runs);
       setActiveRunId(next.activeRunId);
+      // Local mode: reconnect Runtime for the new profile's Gateway.
+      void window.hermesAPI.getConnectionConfig().then((conn) => {
+        if (conn.mode === "local") {
+          void window.hermesAPI.runtimeEnsureLocalReady(
+            name === "default" ? undefined : name,
+          );
+        }
+      });
     },
     [runs, activeRunId],
   );
@@ -836,12 +832,6 @@ function Layout({
             onNew={handleNewChat}
             getAppearance={getAppearance}
           />
-          {verifyWarning && onReinstall && onDismissVerifyWarning && (
-            <VerifyWarningBanner
-              onReinstall={onReinstall}
-              onDismiss={onDismissVerifyWarning}
-            />
-          )}
           <div style={paneStyle("chat")}>
             {runs.map((run) => (
               <div

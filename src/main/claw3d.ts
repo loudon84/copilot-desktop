@@ -9,7 +9,10 @@ import {
 import { join, win32 } from "path";
 import { homedir } from "os";
 import { createConnection } from "net";
-import { getEnhancedPath, HERMES_HOME } from "./installer";
+import {
+  getEnhancedPath,
+  HERMES_HOME,
+} from "./runtime/hermes-runtime-paths";
 import { stripAnsi, safeWriteFile, getActiveProfileNameSync } from "./utils";
 import { getApiServerKey, getConnectionConfig, getModelConfig } from "./config";
 import http from "http";

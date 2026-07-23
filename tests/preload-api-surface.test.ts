@@ -138,9 +138,14 @@ describe("New APIs from v0.8/v0.9 features", () => {
 
 describe("Legacy APIs preserved (backward compat)", () => {
   const requiredMethods = [
-    // Installation
-    "checkInstall",
-    "startInstall",
+    // Runtime connection
+    "runtimeProbeLocal",
+    "runtimeEnsureLocalReady",
+    "runtimeGetStatus",
+    "runtimeRestart",
+    "runtimeValidateHome",
+    "runtimeAdoptHome",
+    "onRuntimeStatusChanged",
     "onInstallProgress",
     // Hermes engine
     "getHermesVersion",

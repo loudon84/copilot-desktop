@@ -6,6 +6,7 @@ import {
   Languages,
   Palette,
   Plug,
+  Server,
   ShieldCheck,
   Users,
   X,
@@ -22,6 +23,7 @@ import DataPane from "./DataPane";
 import AboutPane from "./AboutPane";
 import CommunityPane from "./CommunityPane";
 import LogsPane from "./LogsPane";
+import RuntimePane from "./RuntimePane";
 
 export type SettingsSection =
   | "appearance"
@@ -29,6 +31,7 @@ export type SettingsSection =
   | "privacy"
   | "connection"
   | "data"
+  | "runtime"
   | "about"
   | "community"
   | "logs";
@@ -71,6 +74,12 @@ const SETTINGS_NAV: ReadonlyArray<{
     id: "data",
     labelKey: "settings.nav.data",
     Icon: Database,
+  },
+  {
+    group: "hermes",
+    id: "runtime",
+    labelKey: "settings.nav.runtime",
+    Icon: Server,
   },
   { group: "hermes", id: "about", labelKey: "settings.nav.about", Icon: Info },
   {
@@ -197,6 +206,7 @@ export default function SettingsModal({
             {section === "privacy" && <PrivacyPane />}
             {section === "connection" && <ConnectionPane />}
             {section === "data" && <DataPane />}
+            {section === "runtime" && <RuntimePane />}
             {section === "about" && <AboutPane />}
             {section === "community" && <CommunityPane />}
             {section === "logs" && <LogsPane />}

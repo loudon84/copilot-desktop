@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
-import { HERMES_HOME } from "./installer";
+import { HERMES_HOME } from "./runtime/hermes-runtime-paths";
 import { normalizeProfileName } from "./utils";
 import { getConfigValue, setConfigValue } from "./config";
 
@@ -75,7 +75,7 @@ function allocateFreePort(profile: string): number {
   for (let port = PORT_RANGE_START; port <= PORT_RANGE_END; port++) {
     if (!used.has(port)) return port;
   }
-  // Range exhausted (â‰¥100 named profiles) â€” fall back to the default and let
+  // Range exhausted (â‰?00 named profiles) â€?fall back to the default and let
   // the Python side surface a clear "port already in use" error rather than
   // guessing a port outside the reserved band.
   return DEFAULT_API_SERVER_PORT;
@@ -85,11 +85,11 @@ function allocateFreePort(profile: string): number {
  * Resolve the api_server port the desktop should bind `profile`'s gateway to.
  *
  * config.yaml is the single source of truth:
- *  - default profile â†’ pinned to {@link DEFAULT_API_SERVER_PORT}.
- *  - named profile with no configured port â†’ allocate a free port and persist
+ *  - default profile â†?pinned to {@link DEFAULT_API_SERVER_PORT}.
+ *  - named profile with no configured port â†?allocate a free port and persist
  *    it (the api_server block is written by ensureApiServerConfig).
  *  - named profile whose configured port collides with the default or another
- *    profile (a profile cloned from default inherits 8642) â†’ reassign to a
+ *    profile (a profile cloned from default inherits 8642) â†?reassign to a
  *    free port and rewrite config.yaml in place.
  *
  * Idempotent: once a non-colliding port is persisted, later calls return it
@@ -106,7 +106,7 @@ export function getProfilePort(profile?: string): number {
       portsInUse(name).has(configured);
     if (!collides) return configured;
     const port = allocateFreePort(name);
-    // setConfigValue replaces the existing nested value in place â€” the common
+    // setConfigValue replaces the existing nested value in place â€?the common
     // case here is a profile cloned from default that carries port 8642.
     setConfigValue(API_SERVER_PORT_PATH, String(port), name);
     return port;

@@ -1,5 +1,5 @@
 appId: com.nousresearch.hermes
-productName: Hermes One
+productName: Copilot Desktop
 directories:
   buildResources: build
 files:
@@ -13,7 +13,7 @@ asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/build/Release/*.node
 win:
-  executableName: hermes-agent
+  executableName: copilot-desktop
   target:
     - nsis
     - portable

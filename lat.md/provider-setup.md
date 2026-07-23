@@ -1,8 +1,8 @@
 # Provider setup
 
-The first-run screen where the user picks an AI provider and enters credentials before the app is usable. Rendered by [[src/renderer/src/screens/Setup/Setup.tsx]], it writes the chosen provider/base-URL via `setModelConfig` and any key via `setEnv`.
+Provider credentials and model selection live in the Providers settings screen, not a first-run Setup gate.
 
-The provider list is data-driven from `PROVIDERS.setup` in [[src/renderer/src/constants.ts]]. Each entry carries an `envKey`, `configProvider`, `baseUrl`, and `needsKey`; selecting a card drives which form fields show (API key, or the Local server/base-URL flow).
+Copilot Desktop no longer blocks startup on API keys (see [[runtime-connection]]). Provider cards and Local presets still come from `PROVIDERS.setup` in [[src/renderer/src/constants.ts]]; the Providers tab ([[src/renderer/src/screens/Providers/Providers.tsx]]) writes `setModelConfig` / `setEnv`.
 
 ## Hermes One is the first-priority provider
 
@@ -18,7 +18,7 @@ The source of truth is `CANONICAL_PROVIDERS` in the bundled agent (`hermes-agent
 
 DashScope API-key traffic uses the agent's native `alibaba` provider. The agent itself aliases `qwen` (and `dashscope`, `aliyun`, `alibaba-cloud`) to `alibaba`; only `qwen-oauth` is the Qwen Portal OAuth provider. DashScope hosts resolve to `alibaba` and `DASHSCOPE_API_KEY`, and legacy configs that still say `provider: qwen` keep working: the install-gate env map covers every alias, and `displayProviderFromConfig` lands them on the DashScope card.
 
-DashScope users choose between the mainland China and international endpoints during first-run setup ([[src/renderer/src/screens/Setup/Setup.tsx]]). Both choices keep `provider: alibaba`; only `base_url` changes. The **Setup picker** defaults to mainland China (`DEFAULT_DASHSCOPE_BASE_URL`) and always writes `base_url` explicitly, but the **canonical registry** ([[src/main/provider-registry.ts]] `PROVIDER_BASE_URLS`) stays on the international endpoint because it mirrors the agent's own default and is what `setModelConfig` fills into an empty `base_url` — a CN value there would silently repoint existing international users. The Providers tab has no endpoint field anymore (the active model is picked from configured providers), so `confirmModelPick` preserves the current `base_url` when re-picking an `alibaba` model — dropping it to empty would let the canonical fill flip a mainland user to the intl endpoint.
+DashScope users choose between the mainland China and international endpoints when configuring the provider. Both choices keep `provider: alibaba`; only `base_url` changes. The **Providers UI** defaults to mainland China (`DEFAULT_DASHSCOPE_BASE_URL`) and always writes `base_url` explicitly, but the **canonical registry** ([[src/main/provider-registry.ts]] `PROVIDER_BASE_URLS`) stays on the international endpoint because it mirrors the agent's own default and is what `setModelConfig` fills into an empty `base_url` — a CN value there would silently repoint existing international users. The Providers tab has no endpoint field anymore (the active model is picked from configured providers), so `confirmModelPick` preserves the current `base_url` when re-picking an `alibaba` model — dropping it to empty would let the canonical fill flip a mainland user to the intl endpoint.
 
 ## OpenAI-compatible endpoints route through Local
 

@@ -3,12 +3,12 @@ import { safeStorage } from "electron";
 import { existsSync, readdirSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { isValidProfileName, profileHome, safeWriteFile } from "./utils";
-import { HERMES_HOME } from "./installer";
+import { HERMES_HOME } from "./runtime/hermes-runtime-paths";
 import { normalizeApiUrl } from "./api-url";
 
 // Persists the Hermes account session obtained via device login (see
 // hermes-account.ts). The bearer access token is encrypted at rest with the OS
-// keychain via Electron safeStorage â€” same approach as wallet-store.ts â€” and
+// keychain via Electron safeStorage â€?same approach as wallet-store.ts â€?and
 // never leaves the main process. The renderer only ever sees the public profile.
 
 const ACCOUNT_FILE = "account.json";
@@ -27,13 +27,13 @@ interface StoredAccount {
   user: AccountUser;
 }
 
-/** Public view the renderer receives â€” no token. */
+/** Public view the renderer receives â€?no token. */
 export interface PublicAccount {
   apiUrl: string;
   user: AccountUser;
 }
 
-// profileHome() already normalizes the name (invalid/empty â†’ default profile),
+// profileHome() already normalizes the name (invalid/empty â†?default profile),
 // so the store doesn't re-validate here.
 function accountPath(profile?: string): string {
   return join(profileHome(profile), ACCOUNT_FILE);
@@ -67,7 +67,7 @@ export function getAccount(profile?: string): PublicAccount | null {
   const stored = readAccountFile(profile);
   if (!stored) return null;
   // Normalize on read so a URL stored as http:// by an earlier login is
-  // corrected (remote httpâ†’https) without forcing a re-login â€” the sync path
+  // corrected (remote httpâ†’https) without forcing a re-login â€?the sync path
   // fetches this apiUrl, and the bearer wouldn't survive an httpâ†’https redirect.
   return { apiUrl: normalizeApiUrl(stored.apiUrl), user: stored.user };
 }
@@ -106,7 +106,7 @@ export function saveAccount(
 /**
  * Find which profile home holds a stored account, app-wide. The device login
  * saves `account.json` under whichever profile was active, but features like
- * agent sync act on all profiles at once â€” they need the account wherever it
+ * agent sync act on all profiles at once â€?they need the account wherever it
  * lives. Checks the default home first, then each named profile (plain fs
  * scan; deliberately avoids listProfiles(), which shells out to the CLI).
  * Returns the profile name to pass to getAccount()/getAccessToken(), or null
@@ -141,13 +141,13 @@ export function clearAccount(profile?: string): void {
   try {
     unlinkSync(file);
   } catch {
-    // Best-effort â€” the token is encrypted at rest regardless.
+    // Best-effort â€?the token is encrypted at rest regardless.
   }
 }
 
 /**
  * Sign out everywhere: the account is device-wide, so logout must remove
- * `account.json` from whichever profile home(s) hold one â€” signing in on
+ * `account.json` from whichever profile home(s) hold one â€?signing in on
  * profile A and again on profile B leaves two files, and clearing only the
  * active profile's would keep the device signed in. The seen-guard stops the
  * sweep if a file can't be unlinked (clearAccount is best-effort).

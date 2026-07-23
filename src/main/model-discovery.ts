@@ -20,12 +20,12 @@ import { join } from "path";
 import { readEnv, getModelContextLengthOverride } from "./config";
 import { profileHome } from "./utils";
 import {
-  expectedEnvKeyForModel,
   HERMES_PYTHON,
   HERMES_REPO,
   HERMES_HOME,
   getEnhancedPath,
-} from "./installer";
+} from "./runtime/hermes-runtime-paths";
+import { expectedEnvKeyForModel } from "./installer";
 // PROVIDER_BASE_URLS lives in its own module so `config.ts` can use the
 // same lookup without pulling in this whole file (and triggering a
 // circular import via `model-discovery → config → ...`).

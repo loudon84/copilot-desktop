@@ -17,6 +17,7 @@ export default {
     connection: "Conexión",
     network: "Red",
     data: "Datos",
+    runtime: "Runtime",
     about: "Acerca de y actualizaciones",
     community: "Comunidad",
     logs: "Registros y diagnósticos",

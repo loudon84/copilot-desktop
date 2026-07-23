@@ -15,7 +15,7 @@ import {
   HERMES_REPO,
   hermesCliArgs,
   getEnhancedPath,
-} from "./installer";
+} from "./runtime/hermes-runtime-paths";
 import { isValidNamedProfileName, profileHome } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 

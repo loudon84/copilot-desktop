@@ -17,6 +17,7 @@ export default {
     connection: "連線",
     network: "網路",
     data: "資料",
+    runtime: "執行環境",
     about: "關於與更新",
     community: "社群",
     logs: "記錄與診斷",

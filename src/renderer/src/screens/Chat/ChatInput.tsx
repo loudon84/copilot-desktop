@@ -626,7 +626,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         case "gateway":
           return t("chat.validation.fixInGateway");
         case "setup":
-          return t("chat.validation.fixInSetup");
+        case "gateway":
+          return t("chat.validation.fixInGateway");
         default:
           return "";
       }

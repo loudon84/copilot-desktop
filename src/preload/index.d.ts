@@ -35,6 +35,10 @@ import type {
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type {
+  HermesRuntimeConnectionResult,
+  HermesRuntimeProbe,
+} from "../shared/runtime/runtime-contract";
 
 interface ElectronAPI {
   process: {
@@ -45,14 +49,6 @@ interface ElectronAPI {
       node: string;
     };
   };
-}
-
-interface InstallStatus {
-  installed: boolean;
-  configured: boolean;
-  hasApiKey: boolean;
-  verified: boolean;
-  activeProfile?: string;
 }
 
 interface InstallProgress {
@@ -229,17 +225,20 @@ interface KanbanCreateTaskInput {
 }
 
 interface HermesAPI {
-  // Installation
-  checkInstall: () => Promise<InstallStatus>;
-  verifyInstall: () => Promise<boolean>;
-  startInstall: () => Promise<{ success: boolean; error?: string }>;
-  inspectInstallTarget: () => Promise<{
-    hermesHome: string;
-    repoPath: string;
-    state: "fresh" | "update" | "replace";
-  }>;
-  validateHermesHome: (dir: string) => Promise<boolean>;
-  adoptHermesHome: (dir: string) => Promise<boolean>;
+  // Local Hermes Runtime connection
+  runtimeProbeLocal: (profile?: string) => Promise<HermesRuntimeProbe>;
+  runtimeEnsureLocalReady: (
+    profile?: string,
+  ) => Promise<HermesRuntimeConnectionResult>;
+  runtimeGetStatus: (profile?: string) => Promise<HermesRuntimeProbe>;
+  runtimeRestart: (
+    profile?: string,
+  ) => Promise<HermesRuntimeConnectionResult>;
+  runtimeValidateHome: (dir: string) => Promise<boolean>;
+  runtimeAdoptHome: (dir: string) => Promise<boolean>;
+  onRuntimeStatusChanged: (
+    callback: (probe: HermesRuntimeProbe) => void,
+  ) => () => void;
   quitApp: () => Promise<void>;
   getGpuStatus: () => Promise<GpuStatus>;
   reenableGpu: () => Promise<boolean>;

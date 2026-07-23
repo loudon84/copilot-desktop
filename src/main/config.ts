@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { randomBytes } from "crypto";
 import { join } from "path";
-import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
+import { HERMES_HOME } from "./runtime/hermes-runtime-paths";
+import { expectedEnvKeyForModel } from "./installer";
 import {
   escapeRegex,
   getActiveProfileNameSync,

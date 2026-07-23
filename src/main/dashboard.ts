@@ -13,7 +13,7 @@ import {
   HERMES_HOME,
   HERMES_PYTHON,
   HERMES_REPO,
-} from "./installer";
+} from "./runtime/hermes-runtime-paths";
 import { buildLocalDashboardCliArgs } from "./dashboard-launch";
 import { dashboardWebSocketUrlForRenderer } from "./dashboard-websocket-relay";
 import { ensureLocalDashboardCompatibility } from "./hermes-agent-compat";

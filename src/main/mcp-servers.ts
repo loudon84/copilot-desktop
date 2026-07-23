@@ -3,7 +3,11 @@ import { existsSync, readFileSync } from "fs";
 import { profilePaths, safeWriteFile } from "./utils";
 import { getApiUrl, getRemoteAuthHeader, isRemoteMode } from "./hermes";
 import { getApiServerKey } from "./config";
-import { getEnhancedPath, HERMES_PYTHON, hermesCliArgs } from "./installer";
+import {
+  getEnhancedPath,
+  HERMES_PYTHON,
+  hermesCliArgs,
+} from "./runtime/hermes-runtime-paths";
 
 export type McpTransport = "http" | "stdio" | "unknown";
 

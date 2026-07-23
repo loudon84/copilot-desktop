@@ -17,6 +17,7 @@ export default {
     connection: "接続",
     network: "ネットワーク",
     data: "データ",
+    runtime: "ランタイム",
     about: "情報とアップデート",
     community: "コミュニティ",
     logs: "ログと診断",

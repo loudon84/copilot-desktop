@@ -78,7 +78,7 @@ function extractPreloadInvokeChannels(src: string): string[] {
 const mainChannels = extractIpcHandleChannels(indexSrc);
 const preloadChannels = extractPreloadInvokeChannels(preloadSrc);
 
-describe("IPC Handler â†” Preload Consistency", () => {
+describe("IPC Handler â†?Preload Consistency", () => {
   it("main process registers IPC handlers", () => {
     expect(mainChannels.length).toBeGreaterThan(30);
   });
@@ -131,8 +131,6 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
 
 describe("Legacy IPC handlers preserved", () => {
   const legacyChannels = [
-    "check-install",
-    "start-install",
     "get-hermes-version",
     "run-hermes-doctor",
     "run-hermes-update",
@@ -163,6 +161,42 @@ describe("Legacy IPC handlers preserved", () => {
   for (const ch of legacyChannels) {
     it(`${ch} handler still registered`, () => {
       expect(mainChannels).toContain(ch);
+    });
+  }
+});
+
+describe("Runtime IPC replaces install gate", () => {
+  const runtimeChannels = [
+    "runtime-probe-local",
+    "runtime-ensure-local-ready",
+    "runtime-get-status",
+    "runtime-restart",
+    "runtime-validate-home",
+    "runtime-adopt-home",
+  ];
+
+  for (const ch of runtimeChannels) {
+    it(`main has handler: ${ch}`, () => {
+      expect(mainChannels).toContain(ch);
+    });
+    it(`preload invokes: ${ch}`, () => {
+      expect(preloadChannels).toContain(ch);
+    });
+  }
+
+  const removedInstallChannels = [
+    "check-install",
+    "verify-install",
+    "start-install",
+    "inspect-install-target",
+    "validate-hermes-home",
+    "adopt-hermes-home",
+  ];
+
+  for (const ch of removedInstallChannels) {
+    it(`install channel removed: ${ch}`, () => {
+      expect(mainChannels).not.toContain(ch);
+      expect(preloadChannels).not.toContain(ch);
     });
   }
 });

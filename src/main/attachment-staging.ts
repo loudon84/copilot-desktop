@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { HERMES_HOME } from "./installer";
+import { HERMES_HOME } from "./runtime/hermes-runtime-paths";
 
 /**
  * Staging area for pasted attachments.  Picker / drag-drop attachments
@@ -41,7 +41,7 @@ function uniquePath(dir: string, filename: string): string {
     candidate = join(dir, `${stem}_${i}${ext}`);
     if (!existsSync(candidate)) return candidate;
   }
-  // Astronomically unlikely fallback â€” append a timestamp.
+  // Astronomically unlikely fallback â€?append a timestamp.
   return join(dir, `${stem}_${Date.now()}${ext}`);
 }
 

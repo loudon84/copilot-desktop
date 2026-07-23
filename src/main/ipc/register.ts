@@ -57,12 +57,6 @@ import {
 } from "../gpu-fallback";
 import type { GpuPreferenceMode } from "../../shared/gpu";
 import {
-  checkInstallStatus,
-  verifyInstall,
-  runInstall,
-  inspectInstallTarget,
-  validateHermesHome,
-  setHermesHomeOverride,
   getHermesVersion,
   clearVersionCache,
   runHermesDoctor,
@@ -76,6 +70,11 @@ import {
   readLogs,
   type InstallProgress,
 } from "../installer";
+import { getRuntimeManager } from "../runtime/runtime-manager";
+import type {
+  HermesRuntimeConnectionResult,
+  HermesRuntimeProbe,
+} from "../../shared/runtime/runtime-contract";
 import {
   ensureLocalDashboardCompatibility,
   ensureSshDashboardCompatibility,
@@ -428,7 +427,7 @@ async function getSshDashboardSessionConfig(
     throw new Error("SSH connection is not configured.");
   // Start the UNIFIED machine `hermes dashboard` on the remote and tunnel to it.
   // It serves /api/* + the /api/ws chat WS for EVERY profile (scoped via
-  // ?profile=, see RemoteSessionConfig.profile), NOT /v1 â€” chat over /v1 is the
+  // ?profile=, see RemoteSessionConfig.profile), NOT /v1 â€?chat over /v1 is the
   // gateway api_server (prepareSshTunnel gateway branch). All profiles share one
   // dashboard port + token so the single global SSH tunnel never thrashes. The
   // /api/* routes are gated by the dashboard session token (the api_server key is
@@ -449,7 +448,7 @@ async function getSshDashboardSessionConfig(
 }
 
 // Most session/metadata IPC calls don't carry a profile, but the unified SSH
-// machine dashboard serves EVERY profile â€” an unscoped request silently
+// machine dashboard serves EVERY profile â€?an unscoped request silently
 // returns the DEFAULT profile's data (wrong session list / transcript for a
 // named-profile user). Fall back to the locally persisted active profile so
 // `dashboardApiUrl` appends `?profile=` ("default" needs no param and is
@@ -460,12 +459,12 @@ function activeSshProfile(profile?: string): string {
 
 /**
  * Establish the SSH tunnel to the correct endpoint and cache the matching
- * credential â€” the remote dashboard (/api/* + chat WS; dashboard-token auth)
- * when available, else the gateway api_server (/v1; api_server-key auth) â€”
+ * credential â€?the remote dashboard (/api/* + chat WS; dashboard-token auth)
+ * when available, else the gateway api_server (/v1; api_server-key auth) â€?
  * the dashboard is NOT a /v1 superset, the two are disjoint. EVERY SSH
  * tunnel entry point routes through this so they never target different ports
  * on the single global tunnel and thrash it (each `startSshTunnel` first calls
- * `stopSshTunnel`, so a 9119â†”8642 flip-flop yields "SSH tunnel is not active").
+ * `stopSshTunnel`, so a 9119â†?642 flip-flop yields "SSH tunnel is not active").
  */
 async function prepareSshTunnel(
   conn: ConnectionConfig,
@@ -481,18 +480,18 @@ async function prepareSshTunnel(
     setSshRemoteApiKey(dash.token);
     return;
   }
-  // Gateway /v1 path â€” the no-build chat transport used when the remote has no
+  // Gateway /v1 path â€?the no-build chat transport used when the remote has no
   // dashboard web dist (gateway-only installs) or when transport is "legacy".
   // SSH mode, unlike local mode, never provisioned the remote api_server, so a
-  // fresh server had no /v1 endpoint at all (no API_SERVER_KEY â†’ api_server
-  // refuses to bind; API_SERVER_ENABLED unset â†’ gateway never loads it). Ensure
+  // fresh server had no /v1 endpoint at all (no API_SERVER_KEY â†?api_server
+  // refuses to bind; API_SERVER_ENABLED unset â†?gateway never loads it). Ensure
   // both, then tunnel to the api_server and use that key.
   const { key, created } = await sshEnsureApiServerKey(conn.ssh, profile);
   const remotePort = await sshResolveApiServerPort(conn.ssh, profile);
   const running = await sshGatewayStatus(conn.ssh, profile);
   let apiReady = true;
   if (!running) {
-    // Down â†’ start it. (A cold tunnel must not take over a healthy gateway,
+    // Down â†?start it. (A cold tunnel must not take over a healthy gateway,
     // hence the status check; but a stopped gateway must be started.)
     await sshStartGateway(conn.ssh, profile);
     apiReady = await sshWaitGatewayApiReady(conn.ssh, remotePort);
@@ -503,7 +502,7 @@ async function prepareSshTunnel(
     await sshStartGateway(conn.ssh, profile);
     apiReady = await sshWaitGatewayApiReady(conn.ssh, remotePort);
   }
-  // A false readiness result must FAIL setup â€” opening the tunnel and caching
+  // A false readiness result must FAIL setup â€?opening the tunnel and caching
   // the key anyway reports success while /v1 isn't bound, so the first chat
   // hits a confusing connection error later instead of a clear one here.
   if (!apiReady)
@@ -547,14 +546,14 @@ async function withSshDashboardModelLibrary<T>(
   if (conn.sshChatTransport === "legacy") return legacyOperation();
   try {
     // getSshDashboardSessionConfig starts the remote dashboard (which natively
-    // serves /api/model/*) and tunnels to it â€” no gateway web_server patch /
+    // serves /api/model/*) and tunnels to it â€?no gateway web_server patch /
     // restart dance needed.
     return await dashboardOperation(
       await getSshDashboardSessionConfig(conn, profile),
     );
   } catch (err) {
     // Auto transport degrades to the legacy CLI/file path when the dashboard
-    // can't be reached â€” e.g. a gateway-only remote that can't run the
+    // can't be reached â€?e.g. a gateway-only remote that can't run the
     // dashboard (no Node / no web dist). A forced "dashboard" transport
     // rethrows so the failure is visible.
     if (conn.sshChatTransport === "auto") {
@@ -635,8 +634,8 @@ async function resolveMediaForSave(src: string): Promise<string> {
 /**
  * Resolve the saved-model library entry for an activated (provider, model) so
  * its `apiMode`/`contextLength` can be mirrored into config.yaml. When several
- * entries share the same provider+model â€” e.g. two `custom` endpoints exposing
- * the same model id over different transports/base URLs â€” a bare provider+model
+ * entries share the same provider+model â€?e.g. two `custom` endpoints exposing
+ * the same model id over different transports/base URLs â€?a bare provider+model
  * `find` would return the wrong one and persist its transport, routing requests
  * over the wrong protocol. Disambiguate by base URL in that case; fall back to
  * the first match when none align (single-entry activations are unaffected).
@@ -666,45 +665,52 @@ export function registerIpcHandlers(context: IpcContext): void {
     openExternalUrl,
   } = context;
   const mainWindow = getMainWindow();
-  // Installation
-  ipcMain.handle("check-install", () => {
-    return checkInstallStatus();
+  const runtimeManager = getRuntimeManager();
+
+  // Local Hermes Runtime connection (replaces install gate)
+  ipcMain.handle(
+    "runtime-probe-local",
+    (_event, profile?: string): Promise<HermesRuntimeProbe> =>
+      runtimeManager.probe(profile),
+  );
+  ipcMain.handle(
+    "runtime-ensure-local-ready",
+    (_event, profile?: string): Promise<HermesRuntimeConnectionResult> =>
+      runtimeManager.ensureReady(profile),
+  );
+  ipcMain.handle(
+    "runtime-get-status",
+    (_event, profile?: string): Promise<HermesRuntimeProbe> =>
+      runtimeManager.getStatus(profile),
+  );
+  ipcMain.handle(
+    "runtime-restart",
+    (_event, profile?: string): Promise<HermesRuntimeConnectionResult> =>
+      runtimeManager.restart(profile),
+  );
+  ipcMain.handle("runtime-validate-home", (_event, dir: string) =>
+    runtimeManager.validateHome(dir),
+  );
+  ipcMain.handle("runtime-adopt-home", (_event, dir: string) => {
+    const result = runtimeManager.adoptHome(dir);
+    return result.ok;
   });
 
-  ipcMain.handle("verify-install", () => verifyInstall());
-
-  ipcMain.handle("start-install", async (event) => {
-    try {
-      await runInstall((progress: InstallProgress) => {
-        event.sender.send("install-progress", progress);
-      }, mainWindow);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: (err as Error).message };
+  runtimeManager.onStatusChanged((probe) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send("runtime-status-changed", probe);
+      }
     }
   });
 
-  // Pre-install inspection + "use an existing installation" (issue #272).
-  ipcMain.handle("inspect-install-target", () => inspectInstallTarget());
-  ipcMain.handle("validate-hermes-home", (_event, dir: string) =>
-    validateHermesHome(dir),
-  );
-  ipcMain.handle("adopt-hermes-home", (_event, dir: string) => {
-    if (!validateHermesHome(dir)) return false;
-    // Persist the choice only. HERMES_HOME is resolved once at module
-    // load, so the override takes effect on the next launch â€” the renderer
-    // asks the user to restart. (An app-driven relaunch is unreliable
-    // under the dev server, which is torn down with the process.)
-    setHermesHomeOverride(dir);
-    return true;
-  });
   ipcMain.handle("quit-app", () => app.quit());
 
   // GPU fallback visibility: lets the Office tab explain SwiftShader slowness
   // and offer a one-click recovery instead of silently rendering 3D on the CPU.
   ipcMain.handle("get-gpu-status", () => getGpuStatus());
   ipcMain.handle("reenable-gpu", () => reenableGpuAndRelaunch());
-  // Settings â†’ Appearance hardware-acceleration preference. Validated here
+  // Settings â†?Appearance hardware-acceleration preference. Validated here
   // because the renderer is untrusted for main-process file writes.
   ipcMain.handle("set-gpu-preference", (_event, mode: GpuPreferenceMode) => {
     if (mode !== "auto" && mode !== "on" && mode !== "off") return false;
@@ -809,7 +815,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
   });
 
-  // OAuth provider sign-in â€” spawns `hermes auth add <provider> --type
+  // OAuth provider sign-in â€?spawns `hermes auth add <provider> --type
   // oauth`, streaming the CLI's output to the renderer's sign-in modal.
   ipcMain.handle("oauth-login", (event, provider: string, profile?: string) => {
     // Codex uses a device-code flow: it prints a URL + code instead
@@ -833,7 +839,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           clipboard.writeText(device.code);
           event.sender.send(
             "oauth-login-progress",
-            `\nâ†’ Code ${device.code} copied to clipboard â€” opening browser...\n`,
+            `\nâ†?Code ${device.code} copied to clipboard â€?opening browser...\n`,
           );
         }
       },
@@ -842,7 +848,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   });
   ipcMain.handle("oauth-login-cancel", () => cancelHermesAuthLogin());
 
-  // Hermes account sign-in â€” OAuth 2.0 Device Authorization Grant against the
+  // Hermes account sign-in â€?OAuth 2.0 Device Authorization Grant against the
   // Hermes backend. Streams progress to the renderer's modal, opens the browser
   // approval page once the code is issued, and stores the encrypted session.
   ipcMain.handle("hermes-account-login", async (event, profile?: string) => {
@@ -859,7 +865,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       },
     });
     // Convenience auto-provision: a fresh sign-in should yield model access
-    // without hand-adding keys. Best-effort and local-only â€” the key lands in
+    // without hand-adding keys. Best-effort and local-only â€?the key lands in
     // the local profile `.env`, which remote/SSH chat doesn't read.
     if (result.success && getConnectionConfig().mode === "local") {
       void ensureHermesOneApiKey(profile).catch(() => {});
@@ -879,9 +885,9 @@ export function registerIpcHandlers(context: IpcContext): void {
     return { success: true };
   });
   // Auto-provision a Hermes One Inference key from the signed-in account when
-  // the profile has none (idempotent â€” an existing key is never replaced, the
+  // the profile has none (idempotent â€?an existing key is never replaced, the
   // backend shows the raw key only once). Local mode only: the key is written
-  // to the local profile `.env`, which remote/SSH chat doesn't read â€” issuing
+  // to the local profile `.env`, which remote/SSH chat doesn't read â€?issuing
   // one there would strand an orphan key on the backend every screen visit.
   ipcMain.handle("hermesone-ensure-key", (_event, profile?: string) => {
     if (getConnectionConfig().mode !== "local") {
@@ -892,7 +898,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   // The signed-in account's AI-credit balance, shown on the account card.
   ipcMain.handle("hermesone-credits", () => fetchHermesOneCredits());
 
-  // Cloud agent sync â€” reconciles local profiles with the signed-in Hermes One
+  // Cloud agent sync â€?reconciles local profiles with the signed-in Hermes One
   // account's cloud agents. `agent-sync-updated` tells the renderer to reload
   // its profile list (pull-created profiles appear without a manual refresh).
   ipcMain.handle("agent-sync-run", async (event) => {
@@ -921,7 +927,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     return readEnv(profile);
   });
 
-  // Pre-send chat readiness â€” answers "if Send is clicked right now,
+  // Pre-send chat readiness â€?answers "if Send is clicked right now,
   // will it work?". Fail-open semantics: any uncertain state returns
   // `ok: true`, so the renderer never false-blocks a Send.
   ipcMain.handle("validate-chat-readiness", (_event, profile?: string) => {
@@ -930,7 +936,7 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   // Config-health audit + per-issue auto-fix. The renderer renders a
   // dismissible banner above the chat input and a full report in the
-  // Settings â†’ Diagnose section. Auto-fixes are additive only â€” never
+  // Settings â†?Diagnose section. Auto-fixes are additive only â€?never
   // delete; always log to ~/.hermes/logs/config-fixes.log.
   ipcMain.handle("get-config-health", (_event, profile?: string) => {
     return runConfigHealthCheck(profile);
@@ -966,9 +972,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       }
       setEnvValue(key, value, profile);
       // Restart gateway so it picks up the new API key.
-      // The earlier condition had a precedence bug â€”
+      // The earlier condition had a precedence bug â€?
       //   `(isGatewayRunning() && _API_KEY) || _TOKEN || HF_TOKEN`
-      // â€” that triggered a restart for `_TOKEN`/`HF_TOKEN` writes even
+      // â€?that triggered a restart for `_TOKEN`/`HF_TOKEN` writes even
       // when no local gateway was running, which in remote mode hit the
       // `startGateway` path with no local install (issue #266).
       // restartGateway() now also self-gates on isRemoteMode(), so this
@@ -1107,7 +1113,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // mode (if any) into config.yaml so the gauge, the agent's
       // auto-compaction threshold, and the runtime transport all match the
       // model being activated. Passing `null` when the library entry has none
-      // clears any stale value left by a previously-active model â€” critical for
+      // clears any stale value left by a previously-active model â€?critical for
       // `api_mode`, since a leftover `anthropic_messages`/`chat_completions`
       // would otherwise route the new endpoint over the wrong protocol.
       const libEntry = resolveLibraryModelEntry(provider, model, baseUrl);
@@ -1184,7 +1190,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     return true;
   });
 
-  // API_SERVER_KEY management â€” lets the renderer detect a missing key and
+  // API_SERVER_KEY management â€?lets the renderer detect a missing key and
   // generate one with a button click (local mode) or show instructions (remote/SSH).
   // Additive shape: `hasKey` stays the required primary field; `providerId` /
   // `checkedAt` are optional extras for a follow-up Settings/Gateway UI.
@@ -1193,7 +1199,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
 
   // Drops the cached secrets-provider values so the next status check re-reads
-  // the vault â€” lets the renderer's "Refresh from vault" button take effect
+  // the vault â€?lets the renderer's "Refresh from vault" button take effect
   // immediately instead of waiting out the cache TTL.
   ipcMain.handle("invalidate-secrets-cache", () => {
     invalidateSecretsCache();
@@ -1372,7 +1378,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode !== "ssh") return false;
     // Route through the shared preparer so this targets the SAME endpoint
-    // (dashboard 9119, else gateway api_server) as every other SSH path â€” a
+    // (dashboard 9119, else gateway api_server) as every other SSH path â€?a
     // bare ensureSshTunnel(conn.ssh) here would tunnel to the gateway port and
     // fight the dashboard tunnel.
     await prepareSshTunnel(conn);
@@ -1384,7 +1390,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     return true;
   });
 
-  // Chat â€” lazy-start gateway on first message
+  // Chat â€?lazy-start gateway on first message
   ipcMain.handle(
     "transcribe-audio",
     async (
@@ -1411,20 +1417,27 @@ export function registerIpcHandlers(context: IpcContext): void {
       // Each conversation has a stable runId minted by the renderer. Fall back
       // to a generated id for legacy callers so the run is still tracked.
       const chatRunId = runId || `run-${randomUUID()}`;
-      if (!isRemoteMode() && !isGatewayRunning(profile)) {
-        startGateway(profile);
+      // Local mode: ensure Gateway is healthy before sending (race protection).
+      if (!isRemoteMode()) {
+        const ready = await getRuntimeManager().ensureReady(profile);
+        if (!ready.ok) {
+          throw new Error(
+            ready.errorMessage ||
+              "Hermes Gateway is not ready. Reconnect and try again.",
+          );
+        }
       }
 
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
         // Tunnel to the dashboard (/api/* + chat WS; NOT /v1) and cache its
-        // token, else the gateway api_server (/v1) â€” via the shared preparer
+        // token, else the gateway api_server (/v1) â€?via the shared preparer
         // so all SSH paths agree on one tunnel target.
         await prepareSshTunnel(conn, profile);
       }
 
       // Abort only a prior run under the SAME runId (a re-send in the same
-      // conversation). Sibling runs â€” other background sessions / agents â€”
+      // conversation). Sibling runs â€?other background sessions / agents â€?
       // keep streaming untouched.
       const existing = activeRuns.get(chatRunId);
       if (existing) existing();
@@ -1444,7 +1457,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // destroyed" if the renderer WebContents goes away mid-response
       // (window closed, reloaded, navigated away). Guard every send so a
       // dead sender doesn't crash the IPC handler, and abort the in-flight
-      // chat the first time we see one â€” there's nobody listening anymore.
+      // chat the first time we see one â€?there's nobody listening anymore.
       // Every event carries the runId as its first arg so the renderer can
       // route it to the right conversation among several running at once.
       const safeSend = (channel: string, payload: unknown): boolean => {
@@ -1460,7 +1473,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         activeRuns.get(chatRunId)?.();
       };
 
-      // Ephemeral context inject for the model wire only â€” dual-write below
+      // Ephemeral context inject for the model wire only â€?dual-write below
       // still uses the original `message` so UI/history matching stays clean.
       const wireMessage = await composeWireMessageWithSessionContext(message, {
         profile,
@@ -1473,7 +1486,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           onChunk: (chunk) => {
             fullResponse += chunk;
             if (!safeSend("chat-chunk", chunk)) {
-              // Renderer is gone â€” stop generating and resolve with what we
+              // Renderer is gone â€?stop generating and resolve with what we
               // have so the awaiting promise doesn't leak.
               abortThisRun();
             }
@@ -1538,7 +1551,7 @@ export function registerIpcHandlers(context: IpcContext): void {
             // Notify on error too if window not focused
             if (mainWindow && !mainWindow.isFocused()) {
               new Notification({
-                title: `${APP_NAME} â€” Error`,
+                title: `${APP_NAME} â€?Error`,
                 body: error.slice(0, 100),
               }).show();
             }
@@ -1592,14 +1605,14 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Renderer-driven clipboard write (issue #298 â€” "Copy entire chat").
+  // Renderer-driven clipboard write (issue #298 â€?"Copy entire chat").
   // Routed through the main process so it doesn't depend on the renderer's
   // document being focused, which the navigator.clipboard API requires.
   ipcMain.handle("copy-to-clipboard", (_event, text: string) => {
     clipboard.writeText(typeof text === "string" ? text : "");
   });
 
-  // Media â€” render agent-generated images and save them to disk (#299).
+  // Media â€?render agent-generated images and save them to disk (#299).
   ipcMain.handle("read-media-file", (_event, filePath: string) =>
     readMediaForCurrentConnection(filePath),
   );
@@ -1616,7 +1629,7 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   // Native right-click menu for a rendered media element (#299): "Open"
   // hands the file to the OS default handler (or a web URL to the browser),
-  // "Save asâ€¦" writes a copy elsewhere. Labels are passed in from the
+  // "Save asâ€? writes a copy elsewhere. Labels are passed in from the
   // renderer so the menu honours the active UI locale.
   ipcMain.on(
     "show-media-menu",
@@ -1656,7 +1669,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Attachment staging â€” for pasted blobs that have no filesystem origin.
+  // Attachment staging â€?for pasted blobs that have no filesystem origin.
   ipcMain.handle(
     "stage-attachment",
     (_event, sessionId: string, filename: string, base64Bytes: string) => {
@@ -1667,10 +1680,10 @@ export function registerIpcHandlers(context: IpcContext): void {
     clearStagedAttachments(sessionId);
   });
 
-  // File Platform â€” typed hermesAPI.files surface (Phase 0+).
+  // File Platform â€?typed hermesAPI.files surface (Phase 0+).
   registerFilesIpcHandlers(ipcMain);
 
-  // Model discovery â€” fetch the provider's /v1/models for autocomplete.
+  // Model discovery â€?fetch the provider's /v1/models for autocomplete.
   ipcMain.handle(
     "discover-provider-models",
     (
@@ -1736,7 +1749,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // No local gateway to stop in pure remote mode.
       return true;
     }
-    // No profile argument â†’ stops the active profile's gateway, leaving any
+    // No profile argument â†?stops the active profile's gateway, leaving any
     // other profiles' gateways running.
     stopGateway(undefined, true);
     return true;
@@ -1761,7 +1774,7 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   // Keep the native window appearance in step with the app's theme so the
   // macOS sidebar vibrancy material is dark under a dark theme (and light under
-  // a light one) instead of following the system appearance â€” which is what
+  // a light one) instead of following the system appearance â€?which is what
   // made a dark theme on a light-mode Mac render a milky sidebar. "system" is
   // passed through for the "System" theme so its `prefers-color-scheme` still
   // tracks the OS. See the renderer's ThemeProvider.
@@ -2063,7 +2076,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // The desktop's active profile is the LOCAL selection (persisted in
       // ~/.hermes/active_profile by set-active-profile), not whatever the remote
       // CLI last marked active. Override isActive so the UI highlights the
-      // profile the user actually selected â€” and it survives relaunches.
+      // profile the user actually selected â€?and it survives relaunches.
       const active = getActiveProfileNameSync();
       const list = await sshListProfiles(conn.ssh);
       return list.map((p) => ({
@@ -2090,20 +2103,20 @@ export function registerIpcHandlers(context: IpcContext): void {
     return deleteProfile(name);
   });
   ipcMain.handle("set-active-profile", async (_event, name: string) => {
-    // Persist the selection LOCALLY in every mode (incl. SSH) â€” the desktop
+    // Persist the selection LOCALLY in every mode (incl. SSH) â€?the desktop
     // tracks "which profile is active" via the local ~/.hermes/active_profile,
     // so without this an SSH session forgot the choice and reset to `default`
     // on every relaunch. Then drop the cached health flag so the next check
     // probes the newly-active profile's gateway, not the previous one's.
     setActiveProfile(name);
     notifyProfileSwitched();
-    // Bring the activated profile's own gateway up if it isn't already â€”
+    // Bring the activated profile's own gateway up if it isn't already â€?
     // without stopping any other profile's gateway (their bots stay online).
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       // Per-profile gateway lives on the remote; start it over SSH. (Previously
       // SSH was skipped entirely, so selecting/Chatting a profile in the Agents
-      // page never started its gateway and the status spun on "Startingâ€¦".)
+      // page never started its gateway and the status spun on "Startingâ€?.)
       if (!(await sshGatewayStatus(conn.ssh, name))) {
         await sshStartGateway(conn.ssh, name);
       }
@@ -2113,7 +2126,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     return true;
   });
 
-  // Profile appearance (desktop-only avatar + accent colour). Local-only â€”
+  // Profile appearance (desktop-only avatar + accent colour). Local-only â€?
   // these write to the local ~/.hermes profile dirs, not the SSH remote.
   ipcMain.handle("set-profile-color", (_event, name: string, color: string) =>
     setProfileColor(name, color),
@@ -2283,7 +2296,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Skills. Remote (HTTP) mode routes to the dashboard's /api/skills* â€”
+  // Skills. Remote (HTTP) mode routes to the dashboard's /api/skills* â€?
   // falling through to the local CLI there showed (and mutated) the LOCAL
   // machine's skills while connected to a remote (#578's report). Bundled
   // skills stay local in remote mode: that list is the shipped catalog, not
@@ -2397,7 +2410,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     return searchSessions(query, limit);
   });
 
-  // Credential Pool â€” profile-aware. When `profile` is omitted, the
+  // Credential Pool â€?profile-aware. When `profile` is omitted, the
   // credential pool helpers default to the currently active profile's
   // auth.json (see config.ts:authFilePath), so the renderer can pass an
   // explicit profile or rely on the active-profile fallback.
@@ -2420,7 +2433,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Append a user-typed key as a properly-shaped credential pool
   // entry. Constructs the full upstream schema (id, label, auth_type,
   // priority, source, access_token, base_url, request_count) so the
-  // engine's resolver can read it â€” issue #367 Bug 3.
+  // engine's resolver can read it â€?issue #367 Bug 3.
   ipcMain.handle(
     "add-credential-pool-entry",
     (
@@ -2563,7 +2576,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Shared model definitions â€” per-model-id metadata (display name, context
+  // Shared model definitions â€?per-model-id metadata (display name, context
   // window, capabilities) reused across every provider that serves the model.
   // Local-only, mirroring the existing scoping of the context-length override
   // (the remote/SSH library paths never carried it); remote/ssh sessions get

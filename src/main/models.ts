@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
-import { HERMES_HOME } from "./installer";
+import { HERMES_HOME } from "./runtime/hermes-runtime-paths";
 import { safeWriteFile, profilePaths } from "./utils";
 import { hostDerivedEnvKeyForUrl } from "./host-derived-env";
 import { mirrorFirstPartyAgentProviders } from "./agent-config-providers";
@@ -12,7 +12,7 @@ const MODELS_FILE = join(HERMES_HOME, "models.json");
 const MODEL_DEFS_FILE = join(HERMES_HOME, "model-definitions.json");
 
 /**
- * A persisted `models.json` row â€” a pure *attachment* of a model id to a
+ * A persisted `models.json` row â€?a pure *attachment* of a model id to a
  * provider/endpoint. Shared metadata (display name default, context window,
  * capabilities) lives once in a {@link ModelDefinition} keyed by `model` id, so
  * the same model id attached to two providers shares one definition instead of
@@ -45,7 +45,7 @@ export interface SavedModelRow {
 export interface SavedModel extends SavedModelRow {
   /** Optional manual context-window override (tokens), sourced from the shared
    *  {@link ModelDefinition}. When set, it's mirrored into config.yaml's
-   *  `model.context_length` on activation â€” fixing the context gauge for
+   *  `model.context_length` on activation â€?fixing the context gauge for
    *  providers that don't advertise `context_length` over /models, and driving
    *  the agent's auto-compaction threshold. */
   contextLength?: number;
@@ -59,11 +59,11 @@ export interface SavedModel extends SavedModelRow {
  * Shared, per-model-id metadata. Defined once and merged onto every attachment
  * of that model id, so context window / display name / capabilities are entered
  * a single time and reused across providers. Stored in `model-definitions.json`;
- * local-only (like the per-row context override it replaces â€” the remote/SSH
+ * local-only (like the per-row context override it replaces â€?the remote/SSH
  * library paths never carried it).
  */
 export interface ModelDefinition {
-  /** Canonical model id â€” the key. */
+  /** Canonical model id â€?the key. */
   model: string;
   /** Preferred display name (used when an attachment row has none). */
   name?: string;
@@ -87,9 +87,9 @@ function normalizeContextLength(value: unknown): number | undefined {
 }
 
 /**
- * Raw persisted attachment rows â€” a plain JSON read with no definition merge.
+ * Raw persisted attachment rows â€?a plain JSON read with no definition merge.
  * Writers (`addModel`/`updateModel`/`removeModel`/`seedDefaults`/migration) use
- * this so merged-only fields (`contextLength`, `capabilities`, â€¦) are never
+ * this so merged-only fields (`contextLength`, `capabilities`, â€? are never
  * written back onto a row. Legacy rows may still carry `contextLength`; it's
  * hoisted out by {@link ensureModelDefinitionsMigrated} and otherwise ignored.
  */
@@ -106,7 +106,7 @@ export function readModelsRaw(): SavedModelRow[] {
  * Public read: raw rows with their matching {@link ModelDefinition} merged on.
  * `contextLength` comes from the definition (source of truth); a row's own
  * `name` is never overwritten (`row.name ?? def.name ?? id`) so the runtime's
- * env-key derivation from `name` stays stable. Read-only â€” no writes here, so it
+ * env-key derivation from `name` stays stable. Read-only â€?no writes here, so it
  * is safe on the per-spawn runtime hot path ([[src/main/hermes.ts]] uses the raw
  * store directly and doesn't need the merge, but callers via IPC do).
  */
@@ -204,7 +204,7 @@ export function removeModelDefinition(model: string): boolean {
  * definitions. For each raw row carrying a positive `contextLength`, upsert
  * `defs[row.model]` keeping the larger context window (safer gauge/compaction
  * value) and a first-wins name, then strip `contextLength` off the row. Merges
- * into any existing definitions file and is idempotent â€” after it runs no row
+ * into any existing definitions file and is idempotent â€?after it runs no row
  * has `contextLength`, so a re-run hoists nothing.
  */
 export function ensureModelDefinitionsMigrated(): void {
@@ -302,7 +302,7 @@ function loadCustomProviders(profile?: string): CustomProviderEntry[] {
 }
 
 /** Persist a `custom_providers:` entry's API key into the profile `.env`,
- *  under both key names the two engine generations resolve. Additive only â€”
+ *  under both key names the two engine generations resolve. Additive only â€?
  *  existing values are never overwritten. */
 function writeCustomProviderEnvKeys(
   profile: string | undefined,
@@ -313,14 +313,14 @@ function writeCustomProviderEnvKeys(
     const { envFile } = profilePaths(profile);
     let envContent = existsSync(envFile) ? readFileSync(envFile, "utf-8") : "";
     // Names to persist for this custom-provider key:
-    //   1. CUSTOM_PROVIDER_<NAME>_KEY â€” the historical desktop
+    //   1. CUSTOM_PROVIDER_<NAME>_KEY â€?the historical desktop
     //      contract; the runtime spawn in `hermes.ts` reads it
     //      via the models.json baseUrl match.
     //   2. <VENDOR>_API_KEY when the URL matches a known vendor
-    //      host (e.g. api.deepseek.com â†’ DEEPSEEK_API_KEY) â€”
+    //      host (e.g. api.deepseek.com â†?DEEPSEEK_API_KEY) â€?
     //      required for dual-engine compat: upstream-main's
     //      `_host_derived_api_key()` won't accept the custom-
-    //      prefix form. Old engine (â‰¤ v2026.5.16) doesn't have
+    //      prefix form. Old engine (â‰?v2026.5.16) doesn't have
     //      the host-derive resolver and ignores this extra var,
     //      so writing both is additive and safe.
     // The gateway path in `hermes.ts:startGateway` ingests ALL
@@ -330,7 +330,7 @@ function writeCustomProviderEnvKeys(
     const customPrefixKey = customProviderEnvKey(cp.name);
     const namesToWrite: string[] = [customPrefixKey];
     const hostKey = hostDerivedEnvKeyForUrl(cp.baseUrl);
-    // Don't shadow real OPENAI / ANTHROPIC keys via this path â€”
+    // Don't shadow real OPENAI / ANTHROPIC keys via this path â€?
     // those belong to a separately-configured provider, not a
     // custom-provider key. The persistence guard mirrors the
     // runtime guard in `hermes.ts`.
@@ -435,7 +435,7 @@ export function listModels(profile?: string): SavedModel[] {
     seedDefaults(profile);
   } else {
     // Pick up providers/models added to config.yaml from the terminal since
-    // the library was first seeded â€” keeps `hermes` CLI edits and the desktop
+    // the library was first seeded â€?keeps `hermes` CLI edits and the desktop
     // library in sync instead of only honoring config.yaml on first run.
     syncAgentConfigModels(profile);
   }
@@ -457,7 +457,7 @@ export function addModel(
 ): SavedModel {
   const models = readModelsRaw();
 
-  // A context-window override is shared metadata keyed by model id â€” persist it
+  // A context-window override is shared metadata keyed by model id â€?persist it
   // to the definition, not onto this attachment row, so every provider serving
   // this model id reuses it.
   const ctx = normalizeContextLength(contextLength);
