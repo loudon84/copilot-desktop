@@ -14,6 +14,9 @@ export default defineConfig(
       ".claude/**",
       ".agents/**",
       "build/**",
+      // PRD §2.1 — reference trees must never enter product lint/typecheck.
+      "references/**",
+      "wiki/**",
       // CDP E2E harness — plain Node CommonJS scripts driving the
       // dev electron via Chrome DevTools Protocol for live testing.
       // They intentionally use require() because they run as one-off

@@ -6,6 +6,7 @@ import { getPublicConnectionConfig } from "../config";
 import { stopHealthPolling } from "../hermes";
 import { stopAllDashboards } from "../dashboard";
 import { cleanupTempMediaFiles } from "../media";
+import { runFilesCleanupBestEffort } from "../files/file-cleanup-service";
 import { closeDbConnection } from "../db";
 import { stopSshTunnel } from "../ssh-tunnel";
 import {
@@ -20,6 +21,7 @@ import { setGatewayPromptParent } from "../gatewayPrompt";
 import { showChatContextMenu } from "./context-menu";
 import { buildMenu } from "./menu";
 import { setupUpdater } from "./updater";
+import { registerArtifactProtocolHandler } from "../artifact-protocol";
 
 const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME?.trim() || "Hermes One";
 const OPEN_DEVTOOLS_ON_START =
@@ -51,6 +53,8 @@ export function startMainProcess(): void {
 
   app.whenReady().then(() => {
     electronApp.setAppUserModelId("com.hermes.desktop");
+
+    registerArtifactProtocolHandler();
 
     app.on("browser-window-created", (_, window) => {
       optimizer.watchWindowShortcuts(window);
@@ -106,6 +110,13 @@ export function startMainProcess(): void {
 
     createWindow();
     buildMenu({ getMainWindow: () => mainWindow, openExternalUrl });
+
+    // Best-effort File Platform orphan/temp retention (PR-17).
+    try {
+      runFilesCleanupBestEffort();
+    } catch {
+      // Never block startup on cleanup failures.
+    }
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

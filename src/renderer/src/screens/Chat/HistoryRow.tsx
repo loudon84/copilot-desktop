@@ -2,12 +2,11 @@ import { memo, useState } from "react";
 import { Brain, ChevronRight, Wrench } from "../../assets/icons";
 import { OrbLoader } from "../../components/OrbLoader";
 import { useI18n } from "../../components/useI18n";
-import { AttachmentChip } from "../../components/AttachmentChip";
+import { MessageAttachmentGrid } from "../../components/files";
 import { ToolGlyph, humanizeToolName } from "../../components/toolMeta";
 import { HermesAvatar, AvatarSpacer } from "./MessageRow";
 import type { AgentAvatarInfo } from "./MessageRow";
 import type {
-  Attachment,
   ReasoningMessage,
   ToolCallMessage,
   ToolResultMessage,
@@ -180,8 +179,10 @@ function itemDetail(msg: ToolItem): string {
 
 const ToolActivityItem = memo(function ToolActivityItem({
   msg,
+  onPreviewFile,
 }: {
   msg: ToolItem;
+  onPreviewFile?: (fileId: string) => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const call = isToolCall(msg);
@@ -221,11 +222,15 @@ const ToolActivityItem = memo(function ToolActivityItem({
         <div className="chat-tool-collapse-inner">
           <div className="chat-tool-item-body">
             {hasAttachments && (
-              <div className="chat-history-attachments">
-                {msg.attachments!.map((att: Attachment) => (
-                  <AttachmentChip key={att.id} attachment={att} />
-                ))}
-              </div>
+              <MessageAttachmentGrid
+                attachments={msg.attachments!}
+                className="chat-history-attachments"
+                onPreview={
+                  onPreviewFile
+                    ? (attachment) => onPreviewFile(attachment.id)
+                    : undefined
+                }
+              />
             )}
             <pre
               className={`chat-history-pre ${
@@ -246,6 +251,7 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
   active = false,
   showAvatar = true,
   agent,
+  onPreviewFile,
 }: {
   items: ToolItem[];
   /** True while the turn is still streaming and this is the trailing run —
@@ -254,6 +260,8 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
   showAvatar?: boolean;
   /** Appearance of the chatting agent, shown once the avatar goes idle. */
   agent?: AgentAvatarInfo;
+  /** Open File Preview for a managed attachment id. */
+  onPreviewFile?: (fileId: string) => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const last = items[items.length - 1];
@@ -313,7 +321,11 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
           <div className="chat-tool-collapse-inner">
             <div className="chat-tool-group-items">
               {orderedItems.map((it, index) => (
-                <ToolActivityItem key={`${it.id}-${index}`} msg={it} />
+                <ToolActivityItem
+                  key={`${it.id}-${index}`}
+                  msg={it}
+                  onPreviewFile={onPreviewFile}
+                />
               ))}
             </div>
           </div>

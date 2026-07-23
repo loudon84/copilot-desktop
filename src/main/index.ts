@@ -2,6 +2,7 @@ import { app } from "electron";
 import { applyGpuPreferences, installGpuCrashGuard } from "./gpu-fallback";
 import { startMainProcess } from "./app/start";
 import { loadDotEnvForDev } from "./load-env";
+import { registerArtifactSchemePrivileged } from "./artifact-protocol";
 
 // Dev only: make process.env reflect the project `.env` so runtime env reads
 // (e.g. the Hermes One API endpoint) pick up edits on relaunch without a
@@ -10,6 +11,9 @@ if (!app.isPackaged) loadDotEnvForDev();
 
 applyGpuPreferences();
 installGpuCrashGuard();
+
+// Must run before app ready so hermes-artifact:// is privileged.
+registerArtifactSchemePrivileged();
 
 if (process.env.ENABLE_CDP === "1") {
   app.commandLine.appendSwitch(

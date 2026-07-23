@@ -33,6 +33,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # PRD §2.1 / §24 — product src must not import Chatbox reference trees.
+      - name: Forbid reference imports
+        run: npm run check:no-reference-imports
+
       - name: Test
         run: npm test
 

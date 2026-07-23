@@ -28,3 +28,9 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[office-interactions]] — space representatives: interactive bank tellers whose menu runs account status, balances, and account creation against the hermes-one backend for a chosen agent; the extensible pattern for future spaces (showroom sales, building space).
 - [[office-world-actions]] — chat-commanded errands: the agent's LLM emits world-action blocks from the office chat, its avatar walks the trip route to the bank/showroom, and the rep modal auto-opens running the requested action on arrival.
 - [[mcp-servers]] — add / edit / remove / enable / test MCP servers from the Capabilities → MCP tab; the shared add+edit modal and the in-place atomic `updateMcpServer` upsert (config.yaml locally, gateway REST in Remote/SSH).
+- [[file-platform]] — Phase 0–6 File Platform: config, security, storage, associations, parsers, context builder, cleanup, FileService/IPC.
+- [[file-domain]] — ManagedFile / FileAssociation identity, status, and local vs remote transport rules.
+- [[file-ui-components]] — Renderer file cards, Session Files panel, preview footer actions, AgentOutputFileCard.
+- [[session-file-context]] — Explicit session context associations, FTS search, and ephemeral context builder.
+- [[rich-content]] — RichContentRenderer extracted from AgentMarkdown: Mermaid/SVG/Artifact fences, streaming fence gating, and sandboxed HTML preview.
+- [[file-config]] — `desktop.files.*` Main-only config and Local/Remote attachment transport rules.

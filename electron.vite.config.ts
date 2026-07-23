@@ -5,6 +5,9 @@ import tailwindcss from "@tailwindcss/vite";
 
 const rendererPort = Number(process.env.HERMES_DESKTOP_RENDERER_PORT || 0);
 
+/** PRD §2.1 — never serve or resolve Chatbox reference trees into the app. */
+const referenceDeny = ["**/references/**", "**/wiki/**"];
+
 export default defineConfig({
   main: {
     build: {
@@ -29,9 +32,14 @@ export default defineConfig({
           server: {
             port: rendererPort,
             strictPort: false,
+            fs: { deny: referenceDeny },
           },
         }
-      : {}),
+      : {
+          server: {
+            fs: { deny: referenceDeny },
+          },
+        }),
     resolve: {
       alias: {
         "@renderer": resolve("src/renderer/src"),

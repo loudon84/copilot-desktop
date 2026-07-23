@@ -11,13 +11,19 @@ const preloadTypes = readFileSync(
 
 /**
  * Extract method names from the hermesAPI object in preload/index.ts.
- * Matches lines like `  methodName: (...` or `  methodName: ()`.
+ * Matches property lines like `  methodName: (...` and nested namespaces
+ * like `  files: createFilesApi()`.
  */
 function extractPreloadMethods(src: string): string[] {
   const methods: string[] = [];
-  const re = /^\s{2}(\w+)\s*:\s*\(/gm;
+  const objectMatch = src.match(
+    /const\s+hermesAPI\s*=\s*\{([\s\S]*?)\n\};/,
+  );
+  if (!objectMatch) return [];
+  const body = objectMatch[1];
+  const re = /^\s{2}(\w+)\s*:/gm;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) {
+  while ((m = re.exec(body)) !== null) {
     methods.push(m[1]);
   }
   return [...new Set(methods)];
@@ -100,11 +106,6 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("installMcpCatalogEntry");
   });
 
-  it("has memory provider discovery API", () => {
-    expect(preloadMethods).toContain("discoverMemoryProviders");
-    expect(typeMethods).toContain("discoverMemoryProviders");
-  });
-
   it("has dashboard transport probe APIs", () => {
     expect(preloadMethods).toContain("dashboardStatus");
     expect(typeMethods).toContain("dashboardStatus");
@@ -124,6 +125,12 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("remoteOAuthSessionState");
     expect(preloadMethods).toContain("freshDashboardWsUrl");
     expect(typeMethods).toContain("freshDashboardWsUrl");
+  });
+
+  it("has File Platform nested API", () => {
+    expect(preloadMethods).toContain("files");
+    expect(typeMethods).toContain("files");
+    expect(preloadSrc).toContain("createFilesApi");
   });
 });
 

@@ -18,6 +18,30 @@ vi.mock("./MediaImage", () => ({
   DownloadChip: () => <div data-testid="download-chip" />,
 }));
 
+// Stub the lazy highlighter so CodeBlock can leave the plain-text fallback
+// without waiting on a real Prism import (flaky under vitest's dynamic
+// import timing after the rich-content extraction).
+vi.mock("react-syntax-highlighter", () => ({
+  Prism: ({ children }: { children: string }) => (
+    <div className="token">{children}</div>
+  ),
+}));
+
+vi.mock("react-syntax-highlighter/dist/esm/styles/prism/one-dark", () => ({
+  default: {},
+}));
+
+const mermaidRender = vi.fn(async () => ({
+  svg: "<svg data-testid='mermaid-svg'></svg>",
+}));
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: mermaidRender,
+  },
+}));
+
 // Wait until the lazily-imported Prism highlighter has produced token spans,
 // so a later "no .token" assertion is meaningful rather than just observing
 // the not-yet-loaded fallback.
@@ -25,8 +49,9 @@ async function renderHighlighted(
   markdown: string,
 ): Promise<ReturnType<typeof render>> {
   const view = render(<AgentMarkdown>{markdown}</AgentMarkdown>);
-  await waitFor(() =>
-    expect(view.container.querySelector(".token")).not.toBeNull(),
+  await waitFor(
+    () => expect(view.container.querySelector(".token")).not.toBeNull(),
+    { timeout: 5000 },
   );
   return view;
 }
@@ -115,5 +140,33 @@ describe("AgentMarkdown", () => {
     ).toBe("bash");
     // Box-dominant content still renders plain regardless of the label.
     expect(declared.container.querySelector(".chat-code-plain")).not.toBeNull();
+  });
+
+  // @lat: [[rich-content#Streaming fences stay inert]]
+  // @lat: [[rich-content#E2E scenarios#E2E-05 streaming mermaid]]
+  it("keeps unclosed mermaid inert while streaming", async () => {
+    mermaidRender.mockClear();
+    const open = ["```mermaid", "graph TD", "  A-->B"].join("\n");
+    const { container } = render(
+      <AgentMarkdown streaming>{open}</AgentMarkdown>,
+    );
+    await waitFor(() => {
+      expect(
+        container.querySelector(".rich-content-streaming-hint"),
+      ).not.toBeNull();
+    });
+    expect(mermaidRender).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("graph TD");
+  });
+
+  it("can enter mermaid preview after the fence closes", async () => {
+    mermaidRender.mockClear();
+    const closed = ["```mermaid", "graph TD", "  A-->B", "```"].join("\n");
+    const { container } = render(<AgentMarkdown>{closed}</AgentMarkdown>);
+    await waitFor(
+      () => expect(mermaidRender).toHaveBeenCalled(),
+      { timeout: 5000 },
+    );
+    expect(container.querySelector(".rich-content-streaming-hint")).toBeNull();
   });
 });

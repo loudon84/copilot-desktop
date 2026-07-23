@@ -4,6 +4,7 @@ import { Download, X } from "lucide-react";
 import { useLightboxClose } from "../hooks/useLightboxClose";
 import type { MediaToken } from "../screens/Chat/mediaUtils";
 import { useI18n } from "./useI18n";
+import { AgentOutputFileCard } from "./files/message/AgentOutputFileCard";
 
 /**
  * Returns an `onContextMenu` handler that opens a native right-click menu
@@ -173,13 +174,14 @@ export function MediaSegmentView({
   source: "media-token" | "bare-path";
 }): React.JSX.Element {
   const [verified, setVerified] = useState<boolean | null>(
-    source === "media-token" ? true : null,
+    source === "media-token" && (token.isUrl || token.isImage) ? true : null,
   );
 
   useEffect(() => {
-    // Only an inferred local path needs verifying; explicit tokens and
-    // URLs are trusted as-is.
-    if (source !== "bare-path" || token.isUrl) return;
+    // Images: only inferred bare paths need verifying. Non-image local paths
+    // always probe existence so AgentOutputFileCard can show a missing state.
+    if (token.isUrl) return;
+    if (token.isImage && source !== "bare-path") return;
     let cancelled = false;
     window.hermesAPI
       .mediaFileExists(token.src)
@@ -192,13 +194,37 @@ export function MediaSegmentView({
     return () => {
       cancelled = true;
     };
-  }, [source, token.src, token.isUrl]);
+  }, [source, token.src, token.isUrl, token.isImage]);
+
+  // Non-image agent paths: show a card (including missing) once probed.
+  if (!token.isImage && !token.isUrl) {
+    if (verified === null) return <>{raw}</>;
+    return (
+      <AgentOutputFileCard
+        path={token.src}
+        name={token.name}
+        exists={verified}
+        onOpen={() => void window.hermesAPI.openFileInEditor(token.src)}
+        onReveal={() =>
+          window.hermesAPI.showMediaMenu(token.src, token.name, {
+            open: "Open",
+            saveAs: "Save as…",
+          })
+        }
+      />
+    );
+  }
 
   if (verified !== true) return <>{raw}</>;
   return token.isImage ? (
     <MediaImage token={token} />
   ) : (
-    <DownloadChip token={token} />
+    <AgentOutputFileCard
+      path={token.src}
+      name={token.name}
+      exists
+      onOpen={() => void window.hermesAPI.openExternal(token.src)}
+    />
   );
 }
 

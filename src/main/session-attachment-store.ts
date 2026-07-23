@@ -167,8 +167,10 @@ function findMatchingUserMessageId(
   db: Database.Database,
   sessionId: string,
   promptText: string,
+  options?: { skipIfHasStoredImages?: boolean },
 ): number | null {
   const target = normalizedPromptText(promptText);
+  const skipIfHasStoredImages = options?.skipIfHasStoredImages !== false;
 
   const rows = db
     .prepare(
@@ -189,11 +191,28 @@ function findMatchingUserMessageId(
     if (content.startsWith("\x00json:")) continue;
     if (normalizedPromptText(content) !== target) continue;
     if (!target && !hasTrailingImagePlaceholder(content)) continue;
-    if (hasAttachments.get(row.id)) continue;
+    if (skipIfHasStoredImages && hasAttachments.get(row.id)) continue;
     return row.id;
   }
 
   return null;
+}
+
+/** Locate the latest user message matching prompt text (for File Platform dual-write). */
+export function findUserMessageIdForPrompt(
+  sessionId: string,
+  promptText: string,
+): number | null {
+  const dbPath = activeStateDbPath();
+  if (!existsSync(dbPath)) return null;
+  const db = new Database(dbPath);
+  try {
+    return findMatchingUserMessageId(db, sessionId, promptText, {
+      skipIfHasStoredImages: false,
+    });
+  } finally {
+    db.close();
+  }
 }
 
 export function persistPromptImageAttachments(

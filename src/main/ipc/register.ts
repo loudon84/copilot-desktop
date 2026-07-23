@@ -21,7 +21,10 @@ import type {
   DesktopSessionLocalError,
 } from "../../shared/session-continuation";
 import { stageAttachment, clearStagedAttachments } from "../attachment-staging";
+import { registerFilesIpcHandlers } from "../files";
 import { persistPromptImageAttachments } from "../session-attachment-store";
+import { persistManagedMessageAssociations } from "../files/persist-managed-message-associations";
+import { composeWireMessageWithSessionContext } from "../files/compose-wire-session-context";
 import {
   discoverProviderModels,
   getModelContextWindow,
@@ -1457,8 +1460,15 @@ export function registerIpcHandlers(context: IpcContext): void {
         activeRuns.get(chatRunId)?.();
       };
 
+      // Ephemeral context inject for the model wire only — dual-write below
+      // still uses the original `message` so UI/history matching stays clean.
+      const wireMessage = await composeWireMessageWithSessionContext(message, {
+        profile,
+        sessionId: resumeSessionId,
+      });
+
       const handle = await sendMessage(
-        message,
+        wireMessage,
         {
           onChunk: (chunk) => {
             fullResponse += chunk;
@@ -1484,6 +1494,19 @@ export function registerIpcHandlers(context: IpcContext): void {
             } catch (err) {
               console.warn(
                 "[sessions] Failed to persist prompt image attachments:",
+                err,
+              );
+            }
+            try {
+              persistManagedMessageAssociations(
+                profile,
+                sessionId,
+                message,
+                attachments,
+              );
+            } catch (err) {
+              console.warn(
+                "[files] Failed to persist managed message associations:",
                 err,
               );
             }
@@ -1643,6 +1666,9 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("clear-staged-attachments", (_event, sessionId: string) => {
     clearStagedAttachments(sessionId);
   });
+
+  // File Platform — typed hermesAPI.files surface (Phase 0+).
+  registerFilesIpcHandlers(ipcMain);
 
   // Model discovery — fetch the provider's /v1/models for autocomplete.
   ipcMain.handle(

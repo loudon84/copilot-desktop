@@ -24,6 +24,12 @@ or normal `npm run dev` workflows.
     node scripts/e2e-attach.js
     ```
 
+    PRD §26 optional UI smoke (skips cleanly without CDP):
+
+    ```bash
+    npm run test:e2e-prd-smoke
+    ```
+
     The shared `attach()` helper connects Playwright to the running
     renderer over `http://127.0.0.1:9222` (or `$CDP_PORT`). You can
     drive the UI with DOM-aware selectors, evaluate IPC calls in the

@@ -10,6 +10,9 @@ import { ContextFolderChip } from "./ContextFolderChip";
 import { WorktreePanel } from "./WorktreePanel";
 import { RemoteFolderPicker } from "./RemoteFolderPicker";
 import { WebPreviewPanel } from "./WebPreviewPanel";
+import { FilePreviewPanel } from "../../components/files";
+import { SessionFilesPanel } from "./session-files/SessionFilesPanel";
+import { useFilePreview } from "../../hooks/files/useFilePreview";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions, parseBackgroundCommand } from "./hooks/useChatActions";
@@ -235,6 +238,13 @@ function Chat({
   // Whether the worktree panel is visible (only applies when contextFolder is set)
   // Default false so the panel doesn't open automatically and interfere with scrolling
   const [worktreeVisible, setWorktreeVisible] = useState<boolean>(false);
+  const {
+    state: filePreviewState,
+    openPreview,
+    closePreview,
+    retry: retryFilePreview,
+    loadMore: loadMoreFilePreview,
+  } = useFilePreview();
   const [folderPickerOpen, setFolderPickerOpen] = useState<boolean>(false);
   const [webPreviewVisible, setWebPreviewVisible] = useState<boolean>(false);
   const [webPreviewUrl, setWebPreviewUrl] =
@@ -1016,13 +1026,33 @@ function Chat({
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
               agentAvatar={agentAvatar}
+              onPreviewFile={(fileId) => void openPreview(fileId, profile)}
             />
           )}
           <div ref={bottomRef} />
         </div>
 
+        {hermesSessionId && (
+          <SessionFilesPanel
+            profile={profile}
+            sessionId={hermesSessionId}
+            onPreview={(fileId) => void openPreview(fileId, profile)}
+          />
+        )}
+
         {contextFolder && worktreeVisible && (
           <WorktreePanel folderPath={contextFolder} />
+        )}
+
+        {filePreviewState.open && (
+          <FilePreviewPanel
+            state={filePreviewState}
+            profile={profile}
+            sessionId={hermesSessionId ?? undefined}
+            onClose={closePreview}
+            onRetry={retryFilePreview}
+            onLoadMore={() => void loadMoreFilePreview()}
+          />
         )}
 
         {webPreviewVisible && (
@@ -1052,6 +1082,7 @@ function Chat({
           onSubmit={handleSubmitOrQueue}
           onQuickAsk={actions.handleQuickAsk}
           onAbort={actions.handleAbort}
+          onPreviewFile={(fileId) => void openPreview(fileId, profile)}
           toolbarExtras={
             <>
               <ModelPicker

@@ -29,6 +29,8 @@ import type {
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import { createFilesApi } from "./files-api";
+import type { HermesFilesAPI } from "../shared/files";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -1651,6 +1653,9 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // File Platform (nested API — Phase 0+)
+  files: createFilesApi() as HermesFilesAPI,
 };
 
 if (process.contextIsolated) {
